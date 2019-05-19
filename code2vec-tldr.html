@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="./theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="./theme/pygments/github.min.css">
+  <link rel="stylesheet" type="text/css" href="./theme/font-awesome/css/font-awesome.min.css">
+
+  <script src="./theme/processing/processing.min.js"></script>
+  <script src="./theme/processing/autoresize.js"></script>
+
+
+    <link href="https://thebabush.github.io/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="thebabush Atom">
+
+
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="HandheldFriendly" content="True" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="" />
+
+
+<meta name="author" content="Paolo Montesel" />
+<meta name="description" content="Recently, I made some slides about code2vec, a machine learning work using deeplearning to turn the abstract syntax tree of functions into continuous vectors... Basically, word2vec applied to programming languages. I think I managed to sum up decently the main points of the paper, so I decided to share it …" />
+<meta name="keywords" content="">
+
+<meta property="og:site_name" content="thebabush"/>
+<meta property="og:title" content="code2vec TL;DR"/>
+<meta property="og:description" content="Recently, I made some slides about code2vec, a machine learning work using deeplearning to turn the abstract syntax tree of functions into continuous vectors... Basically, word2vec applied to programming languages. I think I managed to sum up decently the main points of the paper, so I decided to share it …"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="./code2vec-tldr.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2019-03-30 12:00:00+01:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="./author/paolo-montesel.html">
+<meta property="article:section" content="ml"/>
+<meta property="og:image" content="">
+
+  <title>thebabush &ndash; code2vec TL;DR</title>
+
+
+  <!-- Using MathJax, with the delimiters $ -->
+  <!-- Conflict with pygments for the .mo and .mi -->
+  <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+    "HTML-CSS": {
+    styles: {
+    ".MathJax .mo, .MathJax .mi": {color: "black ! important"}}
+    }
+    });
+  </script>
+
+  <style>
+  .align-center {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  </style>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href=".">
+        <img src="./images/me.jpg" alt="Paolo Montesel" title="Paolo Montesel">
+      </a>
+      <h1><a href=".">Paolo Montesel</a></h1>
+
+<p><pre>$ hack; muzak; cat /dev/random</pre></p>
+      <nav>
+        <ul class="list">
+          <li><a href="./pages/about.html#about">About</a></li>
+
+        </ul>
+      </nav>
+
+      <ul class="social">
+        <li><a class="sc-github" href="https://github.com/thebabush/" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-linkedin" href="https://www.linkedin.com/in/paolomontesel/" target="_blank"><i class="fa fa-linkedin"></i></a></li>
+        <li><a class="sc-soundcloud" href="https://soundcloud.com/paolomontesel" target="_blank"><i class="fa fa-soundcloud"></i></a></li>
+        <li><a class="sc-twitter" href="https://twitter.com/pmontesel" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-youtube" href="https://www.youtube.com/user/paolomontesel" target="_blank"><i class="fa fa-youtube"></i></a></li>
+      </ul>
+    </div>
+
+    
+    <canvas id="thecanvas" style="position: absolute; left: 0; top: 0; z-index: -1; width: 1; height: 1; overflow: hidden;"></canvas>
+  </aside>
+  <main>
+
+    <nav>
+      <a href=".">    Home
+</a>
+
+      <a href="/category/security.html">Security</a>
+      <a href="/category/ml.html">Machine Learning</a>
+      <a href="/category/music.html">Music</a>
+      <a href="/category/misc.html">Misc</a>
+      <a href="/category/rantdom.html">Rantdom</a>
+
+      <a href="https://thebabush.github.io/feeds/all.atom.xml">    Atom
+</a>
+
+    </nav>
+
+<article class="single">
+  <header>
+      
+    <h1 id="code2vec-tldr">code2vec TL;DR</h1>
+    <p>
+          Posted on Sat, 2019-03-30 in <a href="./category/ml.html">ml</a>
+
+
+    </p>
+  </header>
+
+
+  <div>
+    <p>Recently, I made some slides about <a href="https://code2vec.org/">code2vec</a>,
+a machine learning work
+using deeplearning to turn the abstract syntax tree of functions into continuous
+vectors...
+Basically, <strong>word2vec</strong> applied to programming languages.
+I think I managed to sum up decently the main points of the paper, so I decided to
+share it here.</p>
+<p>While I'm at it, here's
+<a href="https://github.com/src-d/awesome-machine-learning-on-source-code">a very good list of papers about doing machine learning on code</a>
+by the guys at <a href="https://sourced.tech/">source{d}</a>.</p>
+<p>Somewhat related, but more focused on the security side of things, is
+Fabian Yamaguchi's <a href="http://mlsec.org/joern/">joern</a>, which I highly recommend.</p>
+<p>Enjoy my <strong>code2vec</strong> TL;DR!</p>
+<div style="position: relative; overflow: hidden; padding-top: 56.25%">
+<iframe style="position:absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0" src="https://docs.google.com/presentation/d/e/2PACX-1vRcNTzhlWrbKsyk0viPr3g4wiwqU1zcOU7I9T90I4k6-5QPWx7FCu3WrL_zfnM175U3ozUmC5DC5Gxi/embed?start=false&loop=false&delayms=3000" frameborder="0" allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+    </p>
+  </div>
+
+
+
+    <div class="addthis_relatedposts_inline">
+
+
+</article>
+
+    <footer>
+<p>&copy; Paolo Montesel 2019</p>
+<p>    Powered by <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a>
+</p>    </footer>
+  </main>
+
+
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " thebabush ",
+  "url" : ".",
+  "image": "",
+  "description": ""
+}
+</script>
+
+</body>
+</html>
