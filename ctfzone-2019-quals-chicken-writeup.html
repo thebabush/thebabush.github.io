@@ -60,6 +60,12 @@
     margin-left: auto;
     margin-right: auto;
   }
+  .fix-image {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    max-height: 30em;
+  }
   </style>
 </head>
 <body>
@@ -305,7 +311,7 @@ was indeed <code>admin</code>.
 We got a nice <code>we can't tell you that</code> reply.
 Not the nicest organizers out there :) but another org confirmed the user was
 <code>admin</code>.</p>
-<p>After some more guessing, I thought <em>well... they wouldn't be so <strong>nice</strong> as to
+<p>After some more guessing, I thought <em>well... they wouldn't be so </em><em>nice</em><em> as to
 put some password strength verification on a CTF challenge... right? ...right?</em>.</p>
 <p>My ass.</p>
 <p>The only reason our exploit was failing now, was that the challenge was checking
@@ -377,6 +383,11 @@ challenge :)</p>
 <p><em>babush</em></p>
 <p>P.S.: During a good chunk of this challenge I had
       <a href="https://jinblack.it/">jinblack</a> by my side, so GG to him too.</p>
+<p><strong>Update:</strong> Apparently there was a simpler solution.
+The web-chicken-auth server was exposed to the outside by the reverse-proxy in
+front of it. By putting <code>Host: web-chicken-auth</code> in my requests I would have
+avoided the need of writing this entire blog post.
+Still doesn't make much sense if you ask me.</p>
   </div>
   <div class="tag-cloud">
     <p>
