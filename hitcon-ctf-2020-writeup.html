@@ -1,0 +1,382 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=UA-1824022-6"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'UA-1824022-6');
+  </script>
+
+    <link rel="stylesheet" type="text/css" href="./theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="./theme/pygments/github.min.css">
+  <link rel="stylesheet" type="text/css" href="./theme/font-awesome/css/font-awesome.min.css">
+
+  <script src="./theme/processing/processing.min.js"></script>
+  <script src="./theme/processing/autoresize.js"></script>
+
+
+    <link href="https://thebabush.github.io/feeds/all.atom.xml" type="application/atom+xml" rel="alternate" title="thebabush Atom">
+
+
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="HandheldFriendly" content="True" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="" />
+
+
+<meta name="author" content="Paolo Montesel" />
+<meta name="description" content="Wassup wassup wassup wassuuuuuuuup! C-T-eeeeeF! So, after a somewhat long time out of the CTF scene, I played with my team mhackeroni. These is my (short) writeup for challenge Run Run Run and L&#39;Obscurité (I know you only care about the latter, so I put it at the end :P …" />
+<meta name="keywords" content="">
+
+<meta property="og:site_name" content="thebabush"/>
+<meta property="og:title" content="HITCON CTF 2020 Writeup"/>
+<meta property="og:description" content="Wassup wassup wassup wassuuuuuuuup! C-T-eeeeeF! So, after a somewhat long time out of the CTF scene, I played with my team mhackeroni. These is my (short) writeup for challenge Run Run Run and L&#39;Obscurité (I know you only care about the latter, so I put it at the end :P …"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="./hitcon-ctf-2020-writeup.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2020-12-02 02:00:00+01:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="./author/paolo-montesel.html">
+<meta property="article:section" content="CTF"/>
+<meta property="og:image" content="">
+
+  <title>thebabush &ndash; HITCON CTF 2020 Writeup</title>
+
+
+  <!-- Using MathJax, with the delimiters $ -->
+  <!-- Conflict with pygments for the .mo and .mi -->
+  <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+    "HTML-CSS": {
+    styles: {
+    ".MathJax .mo, .MathJax .mi": {color: "black ! important"}}
+    }
+    });
+  </script>
+
+  <style>
+  .align-center {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .fix-image {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    max-height: 30em;
+  }
+  </style>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href=".">
+        <img src="./images/me.jpg" alt="Paolo Montesel" title="Paolo Montesel">
+      </a>
+      <h1><a href=".">Paolo Montesel</a></h1>
+
+<p><pre>$ hack; muzak; cat /dev/random</pre></p>
+      <nav>
+        <ul class="list">
+          <li><a href="./pages/about.html#about">About</a></li>
+
+        </ul>
+      </nav>
+
+      <ul class="social">
+        <li><a class="sc-github" href="https://github.com/thebabush/" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-linkedin" href="https://www.linkedin.com/in/paolomontesel/" target="_blank"><i class="fa fa-linkedin"></i></a></li>
+        <li><a class="sc-soundcloud" href="https://soundcloud.com/paolomontesel" target="_blank"><i class="fa fa-soundcloud"></i></a></li>
+        <li><a class="sc-twitter" href="https://twitter.com/pmontesel" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-youtube" href="https://www.youtube.com/user/paolomontesel" target="_blank"><i class="fa fa-youtube"></i></a></li>
+      </ul>
+    </div>
+
+    
+    <canvas id="thecanvas" style="position: absolute; left: 0; top: 0; z-index: -1; width: 1; height: 1; overflow: hidden;"></canvas>
+  </aside>
+  <main>
+
+    <nav>
+      <a href=".">    Home
+</a>
+
+      <a href="/category/security.html">Security</a>
+      <a href="/category/ml.html">Machine Learning</a>
+      <a href="/category/music.html">Music</a>
+      <a href="/category/misc.html">Misc</a>
+      <a href="/category/rantdom.html">Rantdom</a>
+
+      <a href="https://thebabush.github.io/feeds/all.atom.xml">    Atom
+</a>
+
+    </nav>
+
+<article class="single">
+  <header>
+      
+    <h1 id="hitcon-ctf-2020-writeup">HITCON CTF 2020 Writeup</h1>
+    <p>
+          Posted on Wed, 2020-12-02 in <a href="./category/ctf.html">CTF</a>
+
+
+    </p>
+  </header>
+
+
+  <div>
+    <p><a href="https://www.youtube.com/watch?v=lCcwn6bGUtU">Wassup wassup wassup wassuuuuuuuup! C-T-eeeeeF!</a></p>
+<p>So, after a somewhat long time out of the CTF scene, I played with my team <a href="https://mhackeroni.it/">mhackeroni</a>.</p>
+<p>These is my (short) writeup for challenge <em>Run Run Run</em> and <em>L'Obscurité</em> (I know you only care about the latter, so I put it at the end :P).
+Only 1 solve in the world, baby.</p>
+<p>We also have an asciinema today, so don't miss the conclusion!</p>
+<h2>Run Run Run</h2>
+<p>This was a Garmin-made custom VM for embedded devices.
+If you are thinking <em>"Wait, what the fuck?"</em> you are correct.</p>
+<p>The VM is pretty simple and I just used the <code>.jar</code> file fom the SDK to get the disassembly, resources and strings.</p>
+<p>After a bit of processing, this is the control flow graph you get:</p>
+<p><a href="./images/20201202-cfg.svg">
+<img src="./images/20201202-cfg.svg" class="align-center" style="max-height: 80vh;" />
+</a></p>
+<p>I'm a huge fan of creating CFGs from CTF VMs and then using Inkscape as IDA Pro.</p>
+<p>Anyway, the Garmin thingie is a stack-based VM, and after some reversing I wrote this equivalent python script:</p>
+<div class="highlight"><pre><span></span><span class="ch">#!/usr/bin/env python3</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="n">magic</span> <span class="o">=</span> <span class="p">[</span>
+  <span class="mi">98</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">84</span><span class="p">,</span> <span class="mi">253</span><span class="p">,</span> <span class="mi">217</span><span class="p">,</span> <span class="mi">18</span><span class="p">,</span> <span class="mi">92</span><span class="p">,</span> <span class="mi">22</span><span class="p">,</span> <span class="mi">112</span><span class="p">,</span> <span class="mi">138</span><span class="p">,</span> <span class="mi">147</span><span class="p">,</span> <span class="mi">46</span><span class="p">,</span> <span class="mi">168</span><span class="p">,</span> <span class="mi">229</span><span class="p">,</span> <span class="mi">31</span><span class="p">,</span> <span class="mi">149</span><span class="p">,</span> <span class="mi">72</span><span class="p">,</span> <span class="mi">94</span><span class="p">,</span> <span class="mi">191</span><span class="p">,</span> <span class="mi">124</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">176</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">104</span><span class="p">,</span> <span class="mi">154</span><span class="p">,</span> <span class="mi">213</span><span class="p">,</span> <span class="mi">235</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">237</span><span class="p">,</span> <span class="mi">61</span><span class="p">,</span> <span class="mi">18</span><span class="p">,</span> <span class="mi">15</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">solve</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+    <span class="n">target</span> <span class="o">=</span> <span class="mi">3</span><span class="o">**</span><span class="n">i</span>
+
+    <span class="n">x_m1</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">x_m2</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">x_m3</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">target</span><span class="p">):</span>
+        <span class="c1"># x[i] = x[i-1] * 2 + x[i-2] + 7 * x[i-3]</span>
+        <span class="n">x_new</span> <span class="o">=</span> <span class="p">(</span><span class="mi">7</span> <span class="o">*</span> <span class="n">x_m3</span> <span class="o">+</span> <span class="n">x_m1</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">x_m2</span><span class="p">)</span> <span class="o">%</span> <span class="mi">31337</span>
+        <span class="n">x_m3</span> <span class="o">=</span> <span class="n">x_m2</span>
+        <span class="n">x_m2</span> <span class="o">=</span> <span class="n">x_m1</span>
+        <span class="n">x_m1</span> <span class="o">=</span> <span class="n">x_new</span>
+
+    <span class="k">return</span> <span class="n">x_m1</span>
+
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">40</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">magic</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^</span> <span class="n">solve</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">&amp;=</span> <span class="mh">0xFF</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="nb">chr</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+</pre></div>
+
+
+<p>So the challenge writes the flag as its output, but it gets exponentially slower (see <code>target</code> above).
+The equation being used is a <a href="https://mathworld.wolfram.com/LinearRecurrenceEquation.html">linear recurrence equation</a> and you can represent it as a simple matrix multiplication.
+Sprinkle some fast modular exponentiation on top of the python code above and you can speed up the algorithm and get the flag.</p>
+<p>In this case, my boy <a href="https://twitter.com/chqmatteo">chqmatteo</a> did the math part because I couldn't be bothered doing it and he is a crypto guy.</p>
+<h2>L'Obscurité</h2>
+<p>Aaaaaand this is the one you care about.</p>
+<p>The challenge was a binary with a <code>go()</code> function taking a bunch of bytes as input:</p>
+<div class="highlight"><pre><span></span><span class="kt">int</span> <span class="kr">__cdecl</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">**</span><span class="n">envp</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="kt">char</span> <span class="n">s</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span> <span class="c1">// [rsp+0h] [rbp-30h]</span>
+  <span class="kt">int</span> <span class="n">v5</span><span class="p">;</span> <span class="c1">// [rsp+20h] [rbp-10h]</span>
+  <span class="kt">int</span> <span class="n">i</span><span class="p">;</span> <span class="c1">// [rsp+24h] [rbp-Ch]</span>
+
+  <span class="n">v5</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="n">read</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input</span><span class="p">,</span> <span class="mi">64uLL</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span> <span class="n">go</span><span class="p">(</span><span class="o">&amp;</span><span class="n">input</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="p">)</span>
+  <span class="p">{</span>
+    <span class="n">memset</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mh">0x14uLL</span><span class="p">);</span>
+    <span class="n">SHA1</span><span class="p">(</span><span class="o">&amp;</span><span class="n">input</span><span class="p">,</span> <span class="mf">64L</span><span class="n">L</span><span class="p">,</span> <span class="n">s</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Flag: hitcon{&quot;</span><span class="p">,</span> <span class="mf">64L</span><span class="n">L</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">20</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span> <span class="p">)</span>
+      <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%02x&quot;</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kr">__int8</span><span class="p">)</span><span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;}</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">else</span>
+  <span class="p">{</span>
+    <span class="n">puts</span><span class="p">(</span><span class="s">&quot;Too large&quot;</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>So, the point is to find an input that makes <code>go()</code> return <code>0</code>.
+Unfortunately, <code>go()</code> is made of 3 basic blocks in total and the middle one is <strong>very</strong> big, aka it's obfuscated.</p>
+<p>I will make it super short and tell you this: like everyone, I wrote an LLVM lifter that didn't work.</p>
+<p>After that, almost like a joke, I wrote a very dumb genetic algorithm and it worked.</p>
+<p>So, first thing was patching the binary to get the return value from the function.
+This is what <code>main()</code> looked like after that:</p>
+<div class="highlight"><pre><span></span><span class="kt">int</span> <span class="kr">__cdecl</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">**</span><span class="n">envp</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="kr">__int64</span> <span class="n">v3</span><span class="p">;</span> <span class="c1">// rax</span>
+
+  <span class="n">read</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input</span><span class="p">,</span> <span class="mh">0x40uLL</span><span class="p">);</span>
+  <span class="n">v3</span> <span class="o">=</span> <span class="n">go</span><span class="p">(</span><span class="o">&amp;</span><span class="n">input</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">input</span><span class="p">);</span>
+  <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%llX&quot;</span><span class="p">,</span> <span class="n">v3</span><span class="p">);</span>
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Then I wrote a stupid python bitflipper:</p>
+<div class="highlight"><pre><span></span><span class="ch">#!/usr/bin/env python3</span>
+
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+
+
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">())</span>
+
+<span class="n">score</span> <span class="o">=</span> <span class="mh">0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF</span>
+<span class="n">best</span> <span class="o">=</span> <span class="p">[</span><span class="mh">0x0</span><span class="p">]</span> <span class="o">*</span> <span class="mh">0x40</span>
+<span class="n">exec</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="k">while</span> <span class="n">score</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="n">guess</span> <span class="o">=</span> <span class="n">best</span><span class="p">[:]</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">30</span><span class="p">)):</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mh">0x3F</span><span class="p">)</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
+        <span class="n">guess</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="mb">0b1</span> <span class="o">&lt;&lt;</span> <span class="n">b</span>
+
+    <span class="n">p</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">check_output</span><span class="p">(</span><span class="s1">&#39;./superpatched&#39;</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">guess</span><span class="p">))</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;ascii&#39;</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span>
+    <span class="c1"># exec += 1</span>
+
+    <span class="k">if</span> <span class="n">p</span> <span class="o">&lt;=</span> <span class="n">score</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="n">best</span> <span class="o">=</span> <span class="n">guess</span>
+        <span class="nb">print</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">best</span><span class="p">)</span><span class="o">.</span><span class="n">hex</span><span class="p">())</span>
+        <span class="c1"># print(exec / (time.time() - start))</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="o">&lt;</span> <span class="n">score</span><span class="p">:</span>
+            <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/tmp/best/</span><span class="si">{}</span><span class="s1">.bin&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">best</span><span class="p">))</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">p</span>
+</pre></div>
+
+
+<p>I actually changed this script a lot along the way, so this is just one of the many iterations.
+Anyway, after some 30-60 minutes I had many solutions to the challenge.</p>
+<p>However, they were not valid.
+In other words, they solved the challenge but the flags I got were not accepted by the scoreboard.</p>
+<p>I'm 100% sure some other team reached this point, because the organizers said that the input bytes should only take the value <code>0x00</code> or <code>0x01</code>.
+But they got stuck here I guess...</p>
+<p>So, after this new constraint I rewrote the bitflipper to just use <code>1</code>s and <code>0</code>s, but it wasn't working that well.</p>
+<p>I was about to go to sleep when I though: <em>Why not take one of the earlier solutions and try to make it valid?</em>.
+And this is what I did.</p>
+<p>Here's the script that takes an invalid solution and changes its bytes to make them <code>0</code> or <code>1</code>:</p>
+<div class="highlight"><pre><span></span><span class="ch">#!/usr/bin/env python3</span>
+
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+
+
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">())</span>
+
+
+<span class="n">best</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/tmp/best/0.bin&#39;</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+<span class="n">p</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">check_output</span><span class="p">(</span><span class="s1">&#39;./superpatched&#39;</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">best</span><span class="p">))</span>
+<span class="n">score</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;ascii&#39;</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span>
+<span class="n">best_weight</span> <span class="o">=</span> <span class="mh">0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFF</span>
+
+<span class="c1"># score = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF</span>
+<span class="c1"># best = [0x0] * 0x40</span>
+<span class="c1"># exec = 0</span>
+<span class="c1"># start = time.time()</span>
+<span class="c1"># while score != 0:</span>
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">guess</span> <span class="o">=</span> <span class="n">best</span><span class="p">[:]</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">30</span><span class="p">)):</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mh">0x3F</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">guess</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>
+            <span class="n">guess</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">b</span>
+
+    <span class="n">p</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">check_output</span><span class="p">(</span><span class="s1">&#39;./superpatched&#39;</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">guess</span><span class="p">))</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;ascii&#39;</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span>
+    <span class="c1"># exec += 1</span>
+
+    <span class="k">if</span> <span class="n">p</span> <span class="o">&amp;</span> <span class="mh">0x8000000000000000</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="k">if</span> <span class="n">p</span> <span class="o">&lt;=</span> <span class="n">score</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">guess</span><span class="p">)</span><span class="o">.</span><span class="n">hex</span><span class="p">())</span>
+        <span class="n">weight</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">bin</span><span class="p">(</span><span class="n">x</span><span class="p">)[</span><span class="mi">2</span><span class="p">:]))</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">guess</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weight</span> <span class="o">&lt;=</span> <span class="n">best_weight</span><span class="p">:</span>
+            <span class="n">best_weight</span> <span class="o">=</span> <span class="n">weight</span>
+            <span class="n">best</span> <span class="o">=</span> <span class="n">guess</span>
+        <span class="c1"># print(exec / (time.time() - start))</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="o">&lt;</span> <span class="n">score</span><span class="p">:</span>
+            <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;/tmp/best/</span><span class="si">{}</span><span class="s1">.bin&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">best</span><span class="p">))</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">p</span>
+</pre></div>
+
+
+<p>Here's an asciinema for the lulz:</p>
+<script id="asciicast-WbFSyYSbmDfGbgLKRqW5PSAzR" src="https://asciinema.org/a/WbFSyYSbmDfGbgLKRqW5PSAzR.js" async></script>
+
+<h2>Conclusion</h2>
+<p>This writeup is a shitty one but to be honest I'm only writing it because many people asked and also because the organizers want it since we reached <strong>2nd place</strong>.</p>
+<p>Some Italian researchers I know from twitter were able to solve the challenge using a <a href="https://twitter.com/Blips_and_Chitz/status/1333837708574257154">SMT solver</a>.
+They are not CTF players though, and did it after the event was finished.</p>
+<p>I honestly don't know what the intended solution was, but it seems like the organizers are not going to release it so... This is my crappy solution and it worked.</p>
+<p>Never underestimate <strong>the power of stupid approaches</strong>, especially in CTFs.</p>
+<p>I guess I won the <a href="https://twitter.com/gf_256/status/1209012768147460096">CTF bingo</a> this time!</p>
+<p>Cheers,</p>
+<p><a href="https://twitter.com/pmontesel"><em>babush</em></a></p>
+  </div>
+  <div class="tag-cloud">
+    <p>
+    </p>
+  </div>
+
+
+
+    <div class="addthis_relatedposts_inline">
+
+
+</article>
+
+    <footer>
+<p>&copy; Paolo Montesel 2019</p>
+<p>    Powered by <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a>
+</p>    </footer>
+  </main>
+
+
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " thebabush ",
+  "url" : ".",
+  "image": "",
+  "description": ""
+}
+</script>
+
+</body>
+</html>
