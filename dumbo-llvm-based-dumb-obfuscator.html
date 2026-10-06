@@ -1,0 +1,363 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Dumbo: LLVM-based Dumb Obfuscator · babush.me</title><meta name=description content=" So you want to learn how to build the most awesome obfuscator known to human being? I’ve got you covered! In this tutorial you will learn all sorts of obfuscation things. Like, …"><link rel=canonical href=https://www.babush.me/dumbo-llvm-based-dumb-obfuscator.html><link rel=icon href=/favicon.ico><meta property="og:title" content="Dumbo: LLVM-based Dumb Obfuscator"><meta property="og:description" content=" So you want to learn how to build the most awesome obfuscator known to human being? I’ve got you covered! In this tutorial you will learn all sorts of obfuscation things. Like, …"><meta property="og:url" content="https://www.babush.me/dumbo-llvm-based-dumb-obfuscator.html"><meta property="og:type" content="article"><meta property="og:site_name" content="babush.me"><meta property="og:locale" content="en_US"><meta property="og:image" content="https://www.babush.me/images/20190223_final_ida.png"><meta property="og:image:alt" content="Cover image for “Dumbo: LLVM-based Dumb Obfuscator”"><meta property="article:published_time" content="2019-02-23T02:02:00+01:00"><meta property="article:author" content="Paolo Montesel"><meta property="article:section" content="security"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://www.babush.me/images/20190223_final_ida.png"><meta name=twitter:site content="@pmontesel"><meta name=twitter:creator content="@pmontesel"><link rel=alternate type=application/rss+xml title=babush.me href=https://www.babush.me/index.xml><link rel=stylesheet href=/css/site.min.7ad14addf03a23abcbda3cbeb8f68a01e124f9d14984a63382e1ca78f2ac0cd9.css integrity="sha256-etFK3fA6I6vL2jy+uPaKAeEk+dFJhKYzguHKePKsDNk="></head><body><a class=skip href=#main>Skip to content</a><header class=masthead><canvas id=lattice aria-hidden=true></canvas><div class=masthead-inner><p class=wordmark><a href=/>babush.me</a></p><p class=tagline>$ hack; muzak; cat /dev/random</p></div></header><nav class=mainnav aria-label=Main><ul><li><a href=/>Home</a></li><li><a href=/posts/index.html>Archive</a></li><li><a href=/about/>About</a></li></ul></nav><main id=main><article class=post><div class=shell><header class=post-header><p class=meta><time datetime=2019-02-23>Feb 23, 2019</time>
+· <a href=/categories/security/>security</a>
+· 13 min read</p><h1>Dumbo: LLVM-based Dumb Obfuscator</h1></header><div class=post-main><nav class=toc aria-label="Table of contents"><p>Contents</p><nav id=TableOfContents><ul><li><a href=#introduction>Introduction</a><ul><li><a href=#setup>Setup</a></li></ul></li><li><a href=#the-heaviest-obfuscation-of-the-universe>The Heaviest Obfuscation Of The Universe</a></li><li><a href=#llvm-ir>LLVM IR</a></li><li><a href=#building-blocks>Building Blocks</a></li><li><a href=#dumb-obfuscator>Dumb Obfuscator</a><ul><li><a href=#the-target-program>The Target Program</a></li><li><a href=#show-me-your-code>Show Me Your Code</a></li></ul></li><li><a href=#building-and-testing>Building and Testing</a></li><li><a href=#final-words>Final Words</a></li></ul></nav></nav><div class=post-body><p><figure><img src=/images/20190223_final_ida.png alt="Final CFG" loading=lazy decoding=async></figure></p><p>So you want to learn how to build the most awesome obfuscator known to human
+being? I&rsquo;ve got you covered!</p><p>In this tutorial you will learn all sorts of obfuscation things.
+Like, obfuscators, what do they obfuscate? Do they obfuscate things?
+Let&rsquo;s find out!</p><h2 id=introduction>Introduction</h2><p><a href=https://en.wikipedia.org/wiki/LLVM>LLVM</a> is one of the most amazing pieces of
+code someone could find on the Internet.
+It is a compiler that is widely used both in research and in practical
+applications because of its flexibility.
+Its main selling point is that it decouples the programming language it&rsquo;s
+compiling from the code generation.</p><p>Basically, things go like this:</p><p><code>Source code -> Language-independent Intermediate Language -> Executable</code></p><p>Now, let&rsquo;s assume you would like to write an obfuscator that takes some source
+code and turns it into a mess.
+That would be sweet, but it would be language-dependent.</p><p>Enter LLVM passes: it&rsquo;s very easy to write compiler passes in LLVM.
+This turns the pipeline above into:</p><p><code>Source -> IR -> Obfuscated IR -> Obfuscated Executable</code></p><p>The most awesome part of this process is that you don&rsquo;t need to care about the
+<code>Source -> IR</code> step, as it&rsquo;s managed by some compiler front-end&mldr;</p><p>&mldr;which was written by someone else&mldr;</p><p>Sweet.</p><h3 id=setup>Setup</h3><p>Throughout all this post, we&rsquo;ll be using LLVM version 7, installed on an
+Ubuntu 18.04 system.
+With minor adjustments to the build scripts, you can make it work on different
+setups.
+You can get LLVM 7 from <a href=https://apt.llvm.org/>here</a> by adding the repos to
+<code>/etc/apt/sources.list.d/llvm.list</code>:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl>$ cat /etc/apt/sources.list.d/llvm.list
+</span></span><span class=line><span class=cl>deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-7 main
+</span></span><span class=line><span class=cl>deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic-7 main
+</span></span></code></pre></div><p>Then you can go with the usual <code>sudo apt update && sudo apt install clang-7</code>.</p><h2 id=the-heaviest-obfuscation-of-the-universe>The Heaviest Obfuscation Of The Universe</h2><p><sup>If you are a metal fan, this is the place where I recommend you put on your
+headphones and listen to some Gojira.</sup></p><p>Let&rsquo;s think about obfuscation.</p><p>Our objective is to turn a simple program into a huge beast of
+unmanageable madness, so as to break any sane
+<a href=https://www.msreverseengineering.com/>reverse engineer</a>&rsquo;s mind or
+<a href=https://angr.io/>automated</a> tool.
+In order to do this, we need to turn</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=p>...</span>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=p>(</span><span class=n>c</span> <span class=o>==</span> <span class=sc>&#39;a&#39;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>...</span>
+</span></span></code></pre></div><p>into something that looks like</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=p>...</span>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=p>(</span><span class=nf>mess</span><span class=p>(</span><span class=n>c</span><span class=p>)</span> <span class=o>==</span> <span class=nf>mess</span><span class=p>(</span><span class=sc>&#39;a&#39;</span><span class=p>))</span>
+</span></span><span class=line><span class=cl><span class=p>...</span>
+</span></span></code></pre></div><p>If we let the compiler optimize the right-hand side of the comparison, we
+would eventually get something that looks like</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=p>...</span>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=p>(</span><span class=nf>mess</span><span class=p>(</span><span class=n>c</span><span class=p>)</span> <span class=o>==</span> <span class=n>super_complex_expression</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=p>...</span>
+</span></span></code></pre></div><p>This happens because the right-hand side of the expression is a constant and so
+whatever transformation we apply can be computed by the compiler at compile
+time.
+If the <code>mess(...)</code> is too complicated, we have to help the compiler and give it
+the final value, which is what we are going to do this time.</p><p>Now, what could <code>mess(...)</code> be?
+Well, after thinking about it for hours and hours, you&rsquo;ll come to my same
+conclusion: RSA encryption.
+It&rsquo;s obvious.
+What could possibly be more secure than a program that uses RSA to obfuscate its
+secrets? Nothing, exactly.</p><p>Basically we want to turn our <code>if</code> into</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=p>...</span>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=p>(</span><span class=nf>pow</span><span class=p>(</span><span class=n>b</span><span class=p>,</span> <span class=n>e</span><span class=p>,</span> <span class=n>n</span><span class=p>)</span> <span class=o>==</span> <span class=nf>pow</span><span class=p>(</span><span class=sc>&#39;a&#39;</span><span class=p>,</span> <span class=n>e</span><span class=p>,</span> <span class=n>n</span><span class=p>))</span>
+</span></span><span class=line><span class=cl><span class=p>...</span>
+</span></span></code></pre></div><p>with <code>n = p * q</code> and <code>pow(a, b, c)</code> being the
+<a href=https://en.wikipedia.org/wiki/Modular_exponentiation>modular exponentiation function</a>.
+If you didn&rsquo;t know, that&rsquo;s exactly what Python&rsquo;s <code>pow(a, b, c)</code> does.</p><h2 id=llvm-ir>LLVM IR</h2><p>As I said at the beginning of the post, we want to work at a programming
+language-independent level, which means we are going to deal with LLVM
+Intermediate Representation.</p><p>LLVM&rsquo;s IR is quite complicated, but you can learn it gradually by either
+looking up its
+<a href=https://llvm.org/docs/LangRef.html>documentation</a>
+or by messing with the <strong>clang</strong> compiler.</p><p>Let&rsquo;s take a simple program <code>simple.c</code>:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>main</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kt>char</span> <span class=n>c</span> <span class=o>=</span> <span class=nf>getchar</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span><span class=n>c</span> <span class=o>==</span> <span class=sc>&#39;a&#39;</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>Yeah, yeah, I know. It&rsquo;s dumb. Just wait a sec, k?</p><p>This is its (slightly cleaned) IR:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=n>define</span> <span class=n>dso_local</span> <span class=n>i32</span> <span class=err>@</span><span class=nf>main</span><span class=p>()</span> <span class=err>#</span><span class=mi>0</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>1</span> <span class=o>=</span> <span class=n>alloca</span> <span class=n>i32</span><span class=p>,</span> <span class=n>align</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>2</span> <span class=o>=</span> <span class=n>alloca</span> <span class=n>i8</span><span class=p>,</span> <span class=n>align</span> <span class=mi>1</span>
+</span></span><span class=line><span class=cl>  <span class=n>store</span> <span class=n>i32</span> <span class=mi>0</span><span class=p>,</span> <span class=n>i32</span><span class=o>*</span> <span class=o>%</span><span class=mi>1</span><span class=p>,</span> <span class=n>align</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>3</span> <span class=o>=</span> <span class=n>call</span> <span class=n>i32</span> <span class=err>@</span><span class=nf>getchar</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>4</span> <span class=o>=</span> <span class=n>trunc</span> <span class=n>i32</span> <span class=o>%</span><span class=mi>3</span> <span class=n>to</span> <span class=n>i8</span>
+</span></span><span class=line><span class=cl>  <span class=n>store</span> <span class=n>i8</span> <span class=o>%</span><span class=mi>4</span><span class=p>,</span> <span class=n>i8</span><span class=o>*</span> <span class=o>%</span><span class=mi>2</span><span class=p>,</span> <span class=n>align</span> <span class=mi>1</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>5</span> <span class=o>=</span> <span class=n>load</span> <span class=n>i8</span><span class=p>,</span> <span class=n>i8</span><span class=o>*</span> <span class=o>%</span><span class=mi>2</span><span class=p>,</span> <span class=n>align</span> <span class=mi>1</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>6</span> <span class=o>=</span> <span class=n>sext</span> <span class=n>i8</span> <span class=o>%</span><span class=mi>5</span> <span class=n>to</span> <span class=n>i32</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>7</span> <span class=o>=</span> <span class=n>icmp</span> <span class=n>eq</span> <span class=n>i32</span> <span class=o>%</span><span class=mi>6</span><span class=p>,</span> <span class=mi>97</span>
+</span></span><span class=line><span class=cl>  <span class=n>br</span> <span class=n>i1</span> <span class=o>%</span><span class=mi>7</span><span class=p>,</span> <span class=n>label</span> <span class=o>%</span><span class=mi>8</span><span class=p>,</span> <span class=n>label</span> <span class=o>%</span><span class=mi>9</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=p>;</span> <span class=o>&lt;</span><span class=n>label</span><span class=o>&gt;:</span><span class=mi>8</span><span class=o>:</span>                                      <span class=p>;</span> <span class=n>preds</span> <span class=o>=</span> <span class=o>%</span><span class=mi>0</span>
+</span></span><span class=line><span class=cl>  <span class=n>store</span> <span class=n>i32</span> <span class=mi>0</span><span class=p>,</span> <span class=n>i32</span><span class=o>*</span> <span class=o>%</span><span class=mi>1</span><span class=p>,</span> <span class=n>align</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>  <span class=n>br</span> <span class=n>label</span> <span class=o>%</span><span class=mi>10</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=p>;</span> <span class=o>&lt;</span><span class=n>label</span><span class=o>&gt;:</span><span class=mi>9</span><span class=o>:</span>                                      <span class=p>;</span> <span class=n>preds</span> <span class=o>=</span> <span class=o>%</span><span class=mi>0</span>
+</span></span><span class=line><span class=cl>  <span class=n>store</span> <span class=n>i32</span> <span class=mi>1</span><span class=p>,</span> <span class=n>i32</span><span class=o>*</span> <span class=o>%</span><span class=mi>1</span><span class=p>,</span> <span class=n>align</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>  <span class=n>br</span> <span class=n>label</span> <span class=o>%</span><span class=mi>10</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=p>;</span> <span class=o>&lt;</span><span class=n>label</span><span class=o>&gt;:</span><span class=mi>10</span><span class=o>:</span>                                     <span class=p>;</span> <span class=n>preds</span> <span class=o>=</span> <span class=o>%</span><span class=mi>9</span><span class=p>,</span> <span class=o>%</span><span class=mi>8</span>
+</span></span><span class=line><span class=cl>  <span class=o>%</span><span class=mi>11</span> <span class=o>=</span> <span class=n>load</span> <span class=n>i32</span><span class=p>,</span> <span class=n>i32</span><span class=o>*</span> <span class=o>%</span><span class=mi>1</span><span class=p>,</span> <span class=n>align</span> <span class=mi>4</span>
+</span></span><span class=line><span class=cl>  <span class=n>ret</span> <span class=n>i32</span> <span class=o>%</span><span class=mi>11</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>It&rsquo;s kind of low level, but we can still see what&rsquo;s going on.
+<code>%3</code> is a variable that gets the outputs of <code>getchar()</code>.
+Then, the program does <code>icmp eq i32 %6, 97</code>, which is a comparison between the
+char we read and <code>'a'</code> (97 in ASCII).
+The last interesting bit is <code>br i1 %7, label %8, label %9</code>, which is a
+conditional jump (or BRanch) which depends on <code>%7</code>.</p><p>Recalling what we said above, we want to turn <code>%7 = icmp eq i32 %6, 97</code> into</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=o>%</span><span class=n>lhs</span> <span class=o>=</span> <span class=p>...</span><span class=nf>mess</span><span class=p>(</span><span class=o>%</span><span class=mi>6</span><span class=p>)...</span>
+</span></span><span class=line><span class=cl><span class=o>%</span><span class=n>rhs</span> <span class=o>=</span> <span class=p>...</span><span class=nf>mess</span><span class=p>(</span><span class=mi>97</span><span class=p>)...</span>
+</span></span><span class=line><span class=cl><span class=o>%</span><span class=mi>7</span> <span class=o>=</span> <span class=n>icmp</span> <span class=n>eq</span> <span class=n>i32</span> <span class=o>%</span><span class=n>lhs</span><span class=p>,</span> <span class=n>rhs</span>
+</span></span><span class=line><span class=cl><span class=n>br</span> <span class=n>i1</span> <span class=o>%</span><span class=mi>7</span><span class=p>,</span> <span class=n>label</span> <span class=o>%</span><span class=mi>8</span><span class=p>,</span> <span class=n>label</span> <span class=o>%</span><span class=mi>9</span>
+</span></span></code></pre></div><p>But first of all&mldr;</p><h2 id=building-blocks>Building Blocks</h2><p>In order for RSA to be secure, we need a decent amount of bits for the keys.
+We will assume 512 bits keys from here on.
+We don&rsquo;t really believe it&rsquo;s possible to crack a 512 bits key nor that quantum
+computing is going to be a thing.</p><p>Before coding the LLVM pass, we have to code some small helpers to handle
+the modular exponentiation of 1024-bits integers.
+Why 1024 instead of 512 you ask? Well, we need to perform operations
+(multiplications, etc&mldr;) on those 512-bits integers and that requires some
+additional space. Feel free to prove that 1024 is enough.
+Luckily for us, LLVM supports (almost) arbitrary integer sizes.
+Unfortunately for us, writing IR code is very time consuming and boring.</p><p>So we use a clever trick: we are gonna code <code>_modexp()</code> in plain C and then do
+some kung-fu to automagically change its types from <code>unsigned int</code> (aka <code>i32</code>)
+to <code>i1024</code>.</p><p>Here&rsquo;s <code>modexp.c</code>:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=kt>unsigned</span> <span class=kt>int</span> <span class=nf>_slow_mod</span><span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>a</span><span class=p>,</span> <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>b</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>x</span> <span class=o>=</span> <span class=n>b</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>while</span> <span class=p>(</span><span class=n>x</span> <span class=o>&lt;=</span> <span class=p>(</span><span class=n>a</span> <span class=o>&gt;&gt;</span> <span class=mi>1</span><span class=p>))</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=n>x</span> <span class=o>&lt;&lt;=</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>while</span> <span class=p>(</span><span class=n>a</span> <span class=o>&gt;=</span> <span class=n>b</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>a</span> <span class=o>&gt;=</span> <span class=n>x</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>      <span class=n>a</span> <span class=o>-=</span> <span class=n>x</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>    <span class=n>x</span> <span class=o>&gt;&gt;=</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=n>a</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>unsigned</span> <span class=kt>int</span> <span class=nf>_modexp</span><span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>base</span><span class=p>,</span> <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>exponent</span><span class=p>,</span> <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>mod</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>result</span> <span class=o>=</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=n>base</span> <span class=o>=</span> <span class=nf>_slow_mod</span><span class=p>(</span><span class=n>base</span><span class=p>,</span> <span class=n>mod</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>while</span> <span class=p>(</span><span class=n>exponent</span> <span class=o>&gt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=p>(</span><span class=n>exponent</span> <span class=o>&amp;</span> <span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>      <span class=n>result</span> <span class=o>=</span> <span class=nf>_slow_mod</span><span class=p>(</span><span class=n>result</span> <span class=o>*</span> <span class=n>base</span><span class=p>,</span> <span class=n>mod</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>exponent</span> <span class=o>&gt;&gt;=</span> <span class=mi>1</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=n>base</span> <span class=o>=</span> <span class=nf>_slow_mod</span><span class=p>(</span><span class=n>base</span> <span class=o>*</span> <span class=n>base</span><span class=p>,</span> <span class=n>mod</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=n>result</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>if we do <code>clang-7 -S -emit-llvm -o modexp.ll modexp.c</code>, we are going to get a
+<code>_modexp</code> function that works on 32-bit ints.
+How can we fix that? <code>sed</code> it like it&rsquo;s 1999:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl>sed <span class=s1>&#39;s/i32/i1024/g&#39;</span> modexp.ll &gt; modexp_wide.ll
+</span></span><span class=line><span class=cl>sed -i <span class=s1>&#39;/!0/d&#39;</span> modexp_wide.ll
+</span></span></code></pre></div><p>The first <code>sed</code> changes the IR code from <code>i32</code> to <code>i1024</code> bits integers.
+The second one is just to fix some errors and it&rsquo;s not important.</p><p>I&rsquo;m 100% sure they didn&rsquo;t teach you this trick in your compiler class.</p><p>If you want to see what <code>modexp_wide</code>&rsquo;s CFG looks like, here&rsquo;s an IDA Pro
+screenshot:</p><p><figure><img src=/images/20190223_modexp_ida.png alt="Modexp CFG" loading=lazy decoding=async></figure></p><h2 id=dumb-obfuscator>Dumb Obfuscator</h2><p>Dumbo is going to be a LLVM Pass, which basically means it takes LLVM IR as
+input and outputs a modified IR file.</p><p>I&rsquo;m not going to go into the details of the implementation as
+<a href=https://github.com/thebabush/dumb-obfuscator/blob/master/dumbo/Dumbo.cpp>the source code is full of comments</a>,
+but the outline of the solution is this:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=k>for</span> <span class=n>function</span> <span class=n>in</span> <span class=nl>program</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>  <span class=k>for</span> <span class=n>basic_block</span> <span class=n>in</span> <span class=nl>function</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>instruction</span> <span class=n>in</span> <span class=nl>basic_block</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>      <span class=k>if</span> <span class=n>instruction</span><span class=p>.</span><span class=n>type</span> <span class=o>==</span> <span class=n>icmp</span> <span class=n>and</span> <span class=n>instruction</span><span class=p>.</span><span class=n>op2</span><span class=p>.</span><span class=nf>is_constant_integer</span><span class=p>()</span><span class=o>:</span>
+</span></span><span class=line><span class=cl>        <span class=n>e</span><span class=p>,</span> <span class=n>n</span> <span class=o>=</span> <span class=nf>generate_rsa_stuff</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=n>instruction</span><span class=p>.</span><span class=n>op1</span> <span class=o>=</span> <span class=nf>pow</span><span class=p>(</span><span class=n>instruction</span><span class=p>.</span><span class=n>op1</span><span class=p>,</span> <span class=n>e</span><span class=p>,</span> <span class=n>n</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>instruction</span><span class=p>.</span><span class=n>op2</span> <span class=o>=</span> <span class=nf>pow</span><span class=p>(</span><span class=n>instruction</span><span class=p>.</span><span class=n>op2</span><span class=p>,</span> <span class=n>e</span><span class=p>,</span> <span class=n>n</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=n>replace</span> <span class=n>icmp</span> <span class=n>with</span> <span class=n>new</span> <span class=n>icmp</span>
+</span></span></code></pre></div><h3 id=the-target-program>The Target Program</h3><p>We need something to test that our obfuscator is correct and doesn&rsquo;t break
+complex programs&mldr; But writing automated tests is dumb, so we are going to
+use the following C program:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=cp>#include</span> <span class=cpf>&lt;stdio.h&gt;</span><span class=cp>
+</span></span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=kt>int</span> <span class=nf>main</span><span class=p>()</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>  <span class=kt>char</span> <span class=n>c</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=nf>puts</span><span class=p>(</span><span class=s>&#34;Show me your character:&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=n>c</span> <span class=o>=</span> <span class=nf>getchar</span><span class=p>();</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>if</span> <span class=p>(</span><span class=n>c</span> <span class=o>+</span> <span class=mh>0x5A</span> <span class=o>==</span> <span class=mh>0xAA</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>puts</span><span class=p>(</span><span class=s>&#34;You are a proper Prosecco drinker mate, come join the AA!&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=nf>puts</span><span class=p>(</span><span class=s>&#34;Looks like we got a non drinker here, sad&#34;</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>  <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>  <span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+</span></span><span class=line><span class=cl><span class=p>}</span>
+</span></span></code></pre></div><p>&mldr;once it runs on one program it will run on everything you&rsquo;ll throw at it&mldr;
+right?</p><h3 id=show-me-your-code>Show Me Your Code</h3><p>The main work is done by subclassing <code>llvm::FunctionPass</code> and reimplementing the
+<code>bool runOnFunction(llvm::Function &amp;F)</code> method</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl><span class=p>...</span>
+</span></span><span class=line><span class=cl>  <span class=k>struct</span> <span class=nl>DumboPass</span> <span class=p>:</span> <span class=n>public</span> <span class=n>llvm</span><span class=o>::</span><span class=n>FunctionPass</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>    <span class=k>static</span> <span class=kt>char</span> <span class=n>ID</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=nf>DumboPass</span><span class=p>()</span> <span class=o>:</span> <span class=n>llvm</span><span class=o>::</span><span class=nf>FunctionPass</span><span class=p>(</span><span class=n>ID</span><span class=p>)</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>virtual</span> <span class=kt>bool</span> <span class=nf>runOnFunction</span><span class=p>(</span><span class=n>llvm</span><span class=o>::</span><span class=n>Function</span> <span class=o>&amp;</span><span class=n>F</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>       <span class=p>...</span><span class=n>our</span> <span class=n>logic</span> <span class=n>goes</span> <span class=n>here</span><span class=p>...</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span><span class=line><span class=cl><span class=p>...</span>
+</span></span></code></pre></div><p>The method takes a function <code>F</code> as input and returns <code>true</code> if <code>F</code> has been
+modified.
+We begin by writing the function name on the console:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>    <span class=n>virtual</span> <span class=kt>bool</span> <span class=nf>runOnFunction</span><span class=p>(</span><span class=n>llvm</span><span class=o>::</span><span class=n>Function</span> <span class=o>&amp;</span><span class=n>F</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>      <span class=kt>bool</span> <span class=n>modified</span> <span class=o>=</span> <span class=nb>false</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>      <span class=n>llvm</span><span class=o>::</span><span class=nf>errs</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;Running on </span><span class=se>\&#34;</span><span class=s>&#34;</span> <span class=o>&lt;&lt;</span> <span class=n>F</span><span class=p>.</span><span class=nf>getName</span><span class=p>()</span> <span class=o>&lt;&lt;</span> <span class=s>&#34;</span><span class=se>\&#34;\n</span><span class=s>&#34;</span><span class=p>;</span>
+</span></span></code></pre></div><p>We then iterate over <code>F</code>&rsquo;s basic blocks and instructions:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>      <span class=c1>// A function is made of basic blocks...
+</span></span></span><span class=line><span class=cl>      <span class=k>for</span> <span class=p>(</span><span class=n>llvm</span><span class=o>::</span><span class=n>BasicBlock</span><span class=o>&amp;</span> <span class=nl>B</span> <span class=p>:</span> <span class=n>F</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>        <span class=c1>// ...which are made out of instructions...
+</span></span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=p>(</span><span class=n>llvm</span><span class=o>::</span><span class=n>Instruction</span><span class=o>&amp;</span> <span class=nl>I</span> <span class=p>:</span> <span class=n>B</span><span class=p>)</span> <span class=p>{</span>
+</span></span></code></pre></div><p>Next, we want to filter the instructions and take care of only <code>icmp</code></p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>          <span class=c1>// ...and we only want `icmp` instructions...
+</span></span></span><span class=line><span class=cl>          <span class=k>if</span> <span class=p>(</span><span class=k>auto</span> <span class=n>op</span> <span class=o>=</span> <span class=n>llvm</span><span class=o>::</span><span class=n>dyn_cast</span><span class=o>&lt;</span><span class=n>llvm</span><span class=o>::</span><span class=n>ICmpInst</span><span class=o>&gt;</span><span class=p>(</span><span class=o>&amp;</span><span class=n>I</span><span class=p>))</span> <span class=p>{</span>
+</span></span></code></pre></div><p>Don&rsquo;t be scared of <code>dyn_cast&lt;></code>. It&rsquo;s a custom cast operator defined by the
+clever people working on LLVM and it simply returns <code>nullptr</code> if <code>I</code>&rsquo;s type is
+not <code>ICmpInst</code>.</p><p>The next thing we need to do is to make sure that <code>ICmpInst</code> is using the
+equality operator and that its right-hand side operand is a constant integer:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=c1>// ...which use the equality operator
+</span></span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=p>(</span><span class=n>op</span><span class=o>-&gt;</span><span class=nf>getPredicate</span><span class=p>()</span> <span class=o>!=</span> <span class=n>llvm</span><span class=o>::</span><span class=n>ICmpInst</span><span class=o>::</span><span class=n>ICMP_EQ</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>              <span class=k>continue</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>            <span class=c1>// We only obfuscate constants.
+</span></span></span><span class=line><span class=cl>            <span class=c1>// We only handle them in the right-hand side but it&#39;s trivial to
+</span></span></span><span class=line><span class=cl>            <span class=c1>// add support for lhs.
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>ConstantInt</span><span class=o>*</span> <span class=n>rhs</span> <span class=o>=</span> <span class=n>llvm</span><span class=o>::</span><span class=n>dyn_cast</span><span class=o>&lt;</span><span class=n>llvm</span><span class=o>::</span><span class=n>ConstantInt</span><span class=o>&gt;</span><span class=p>(</span><span class=n>op</span><span class=o>-&gt;</span><span class=nf>getOperand</span><span class=p>(</span><span class=mi>1</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=p>(</span><span class=n>rhs</span> <span class=o>==</span> <span class=n>nullptr</span><span class=p>)</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>              <span class=k>continue</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=p>}</span>
+</span></span></code></pre></div><p>As written in the comment, it&rsquo;s easy to add support for constants on the
+left-hand side, but we are trying to keep the code as simple as possible.</p><p>The next LLVM object we are going to need is the <code>IRBuilder</code>.
+This is an object that makes creating LLVM IR very easy.
+Its operand is the insertion point for the IR it is going to generate.
+In our case the insertion point is going to be the old <code>ICmpInst</code> itself:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=c1>// Create an IRBuilder to make things easier
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>IRBuilder</span><span class=o>&lt;&gt;</span> <span class=nf>builder</span><span class=p>(</span><span class=n>op</span><span class=p>);</span>
+</span></span></code></pre></div><p>Now we can start to think about transforming the original IR.
+We have a problem though: the IR is typed for normal sized integers but our
+helper, <code>_modexp</code>, needs <code>i1024</code> operands.
+We can fix this by using <code>builder.CreateZExt(originalOperand, wideIntType)</code>,
+which will zero-extend our integers:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=c1>// New operand size
+</span></span></span><span class=line><span class=cl>            <span class=kt>unsigned</span> <span class=n>opSize</span> <span class=o>=</span> <span class=n>KEY_SIZE</span> <span class=o>*</span> <span class=mi>2</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>Type</span><span class=o>*</span> <span class=n>opType</span> <span class=o>=</span> <span class=n>llvm</span><span class=o>::</span><span class=n>Type</span><span class=o>::</span><span class=nf>getIntNTy</span><span class=p>(</span><span class=n>F</span><span class=p>.</span><span class=nf>getContext</span><span class=p>(),</span> <span class=n>opSize</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>            <span class=c1>// Get the non-constant operand on the left
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>Value</span><span class=o>*</span> <span class=n>lhs</span> <span class=o>=</span> <span class=n>op</span><span class=o>-&gt;</span><span class=nf>getOperand</span><span class=p>(</span><span class=mi>0</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=c1>// Extend it to the new operand size
+</span></span></span><span class=line><span class=cl>            <span class=n>lhs</span> <span class=o>=</span> <span class=n>builder</span><span class=p>.</span><span class=nf>CreateZExt</span><span class=p>(</span><span class=n>lhs</span><span class=p>,</span> <span class=n>opType</span><span class=p>);</span>
+</span></span></code></pre></div><p><code>opType</code> is an LLVM object that describes the integer type we just defined.
+We can finally generate the IR needed to call <code>_modexp</code>.
+Since it&rsquo;s in a separated compilation unit (<code>modexp.c</code>) we need to get a
+fully-typed reference to it.
+Here&rsquo;s how to do it:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=c1>// Create _modexp FunctionType
+</span></span></span><span class=line><span class=cl>            <span class=n>std</span><span class=o>::</span><span class=n>vector</span><span class=o>&lt;</span><span class=n>llvm</span><span class=o>::</span><span class=n>Type</span><span class=o>*&gt;</span> <span class=n>args</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=n>args</span><span class=p>.</span><span class=nf>push_back</span><span class=p>(</span><span class=n>opType</span><span class=p>);</span> <span class=c1>// base
+</span></span></span><span class=line><span class=cl>            <span class=n>args</span><span class=p>.</span><span class=nf>push_back</span><span class=p>(</span><span class=n>opType</span><span class=p>);</span> <span class=c1>// exponent
+</span></span></span><span class=line><span class=cl>            <span class=n>args</span><span class=p>.</span><span class=nf>push_back</span><span class=p>(</span><span class=n>opType</span><span class=p>);</span> <span class=c1>// mod
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>FunctionType</span><span class=o>*</span> <span class=n>fccType</span> <span class=o>=</span> <span class=n>llvm</span><span class=o>::</span><span class=n>FunctionType</span><span class=o>::</span><span class=nf>get</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>              <span class=n>opType</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>              <span class=n>args</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>              <span class=nb>false</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=c1>// Declare it in the current module (or get a reference to it)
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>Constant</span> <span class=o>*</span><span class=n>_modexp</span> <span class=o>=</span> <span class=n>F</span><span class=p>.</span><span class=nf>getParent</span><span class=p>()</span><span class=o>-&gt;</span><span class=nf>getOrInsertFunction</span><span class=p>(</span><span class=s>&#34;_modexp&#34;</span><span class=p>,</span> <span class=n>fccType</span><span class=p>);</span>
+</span></span></code></pre></div><p>Remember the beginning of this post? I said that we need to help the compiler
+inline the computations on <code>rhs</code>.
+We solve this problem by leveraging OpenSSL and computing <code>pow(rhs, e, n)</code>
+at compile time:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=c1>// encryptedRhs = pow(rhs, e, n)
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>APInt</span> <span class=n>e</span><span class=p>,</span> <span class=n>n</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>APInt</span> <span class=n>encryptedRhs</span> <span class=o>=</span> <span class=nf>MakeRandomKey</span><span class=p>(</span><span class=n>rhs</span><span class=o>-&gt;</span><span class=nf>getValue</span><span class=p>(),</span> <span class=n>e</span><span class=p>,</span> <span class=n>n</span><span class=p>);</span>
+</span></span></code></pre></div><p>If you are interested into the inner workings of <code>MakeRandomKey(...)</code> you can
+look at the complete code in the repo.
+What you need to know is that <code>encryptedRhs</code> now contains the modified
+right-hand side constant.</p><p>Finally, we generate the IR to call <code>_modexp</code> and create a new <code>ICmpInst</code> with
+the operands we created in the past few snippets:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=c1>// encryptedLhs = _modexp(lhs, e, n)
+</span></span></span><span class=line><span class=cl>            <span class=n>std</span><span class=o>::</span><span class=n>vector</span><span class=o>&lt;</span><span class=n>llvm</span><span class=o>::</span><span class=n>Value</span><span class=o>*&gt;</span> <span class=n>concreteArgs</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>            <span class=n>concreteArgs</span><span class=p>.</span><span class=nf>push_back</span><span class=p>(</span><span class=n>lhs</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=n>concreteArgs</span><span class=p>.</span><span class=nf>push_back</span><span class=p>(</span><span class=n>llvm</span><span class=o>::</span><span class=n>ConstantInt</span><span class=o>::</span><span class=nf>get</span><span class=p>(</span><span class=n>opType</span><span class=p>,</span> <span class=n>e</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>            <span class=n>concreteArgs</span><span class=p>.</span><span class=nf>push_back</span><span class=p>(</span><span class=n>llvm</span><span class=o>::</span><span class=n>ConstantInt</span><span class=o>::</span><span class=nf>get</span><span class=p>(</span><span class=n>opType</span><span class=p>,</span> <span class=n>n</span><span class=p>));</span>
+</span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>Value</span><span class=o>*</span> <span class=n>encryptedLhs</span> <span class=o>=</span> <span class=n>builder</span><span class=p>.</span><span class=nf>CreateCall</span><span class=p>(</span><span class=n>fccType</span><span class=p>,</span> <span class=n>_modexp</span><span class=p>,</span> <span class=n>concreteArgs</span><span class=p>);</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>            <span class=c1>// Replace the original comparison with the encrypted one
+</span></span></span><span class=line><span class=cl>            <span class=n>llvm</span><span class=o>::</span><span class=n>Value</span> <span class=o>*</span><span class=n>newCmp</span> <span class=o>=</span> <span class=n>builder</span><span class=p>.</span><span class=nf>CreateICmpEQ</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=n>encryptedLhs</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=n>llvm</span><span class=o>::</span><span class=n>ConstantInt</span><span class=o>::</span><span class=nf>get</span><span class=p>(</span><span class=n>opType</span><span class=p>,</span> <span class=n>encryptedRhs</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>);</span>
+</span></span><span class=line><span class=cl>            <span class=n>op</span><span class=o>-&gt;</span><span class=nf>replaceAllUsesWith</span><span class=p>(</span><span class=n>newCmp</span><span class=p>);</span>
+</span></span></code></pre></div><p>What <code>op->replaceAllUsesWith(newCmp)</code> does is take every place where <code>op</code> is
+used and replace it with <code>newCmp</code>.
+We should somehow remove <code>op</code> from the IR since it&rsquo;s useless at this point, but
+LLVM does this for us through its built-in optimization passes.</p><p>Just to be complete, here&rsquo;s how to close the method :D</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-c data-lang=c><span class=line><span class=cl>            <span class=n>modified</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>          <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>      <span class=p>}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>      <span class=k>return</span> <span class=n>modified</span><span class=p>;</span>
+</span></span><span class=line><span class=cl>    <span class=p>}</span>
+</span></span></code></pre></div><h2 id=building-and-testing>Building and Testing</h2><p>The repo contains two scripts, <code>build.sh</code> and <code>test.sh</code>, that simplify the build
+process.
+I used CMake to build the project, so you need to install it.
+Then you can run <code>./build.sh && ./test.sh</code> and hopefully see this:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl>$ ./build.sh <span class=o>&amp;&amp;</span> ./test.sh
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Making the LLVM pass...
+</span></span><span class=line><span class=cl>Scanning dependencies of target DumboPass
+</span></span><span class=line><span class=cl><span class=o>[</span> 50%<span class=o>]</span> Building CXX object dumbo/CMakeFiles/DumboPass.dir/Dumbo.cpp.o
+</span></span><span class=line><span class=cl><span class=o>[</span>100%<span class=o>]</span> Linking CXX shared module DumboPass.so
+</span></span><span class=line><span class=cl><span class=o>[</span>100%<span class=o>]</span> Built target <span class=nv>DumboPass</span>
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Making the helper...
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Extending the helper from i32 to i1024...
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Fixing wide char stuff...
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Compiling LLVM IR...
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Obfuscated LLVM IR:
+</span></span><span class=line><span class=cl>Running on <span class=s2>&#34;main&#34;</span>
+</span></span><span class=line><span class=cl>Found ICMP:   %9 <span class=o>=</span> icmp eq i32 %8, <span class=m>170</span>
+</span></span><span class=line><span class=cl>...
+</span></span><span class=line><span class=cl>define dso_local i32 @main<span class=o>()</span> <span class=c1>#0 {</span>
+</span></span><span class=line><span class=cl>...
+</span></span><span class=line><span class=cl>  %4 <span class=o>=</span> call i32 @getchar<span class=o>()</span>
+</span></span><span class=line><span class=cl>  %5 <span class=o>=</span> trunc i32 %4 to i8
+</span></span><span class=line><span class=cl>  store i8 %5, i8* %2, align <span class=m>1</span>
+</span></span><span class=line><span class=cl>  %6 <span class=o>=</span> load i8, i8* %2, align <span class=m>1</span>
+</span></span><span class=line><span class=cl>  %7 <span class=o>=</span> sext i8 %6 to i32
+</span></span><span class=line><span class=cl>  %8 <span class=o>=</span> add nsw i32 %7, <span class=m>90</span>
+</span></span><span class=line><span class=cl>  %9 <span class=o>=</span> zext i32 %8 to i1024
+</span></span><span class=line><span class=cl>  %10 <span class=o>=</span> call i1024 @_modexp<span class=o>(</span>i1024 %9, i1024 65537, i1024 10170070982887972103340063855289168285527513471806124741725930031571761444653336699139861668209799334988128354337339862621980253623704262315982748608975161<span class=o>)</span>
+</span></span><span class=line><span class=cl>  %11 <span class=o>=</span> icmp eq i1024 %10, <span class=m>3469564053790366715061592323640176705598106936172402593847334788658242570835498256709118189258676311740661037640620975888408101193592328848869326580739332</span>
+</span></span><span class=line><span class=cl>  %12 <span class=o>=</span> icmp eq i32 %8, <span class=m>170</span>
+</span></span><span class=line><span class=cl>  br i1 %11, label %13, label %15
+</span></span><span class=line><span class=cl>...
+</span></span><span class=line><span class=cl>  ret i32 <span class=m>0</span>
+</span></span><span class=line><span class=cl><span class=o>}</span>
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Compiling final executable...
+</span></span><span class=line><span class=cl><span class=o>====</span>&gt; Running final executable...
+</span></span><span class=line><span class=cl>Show me your character:
+</span></span></code></pre></div><p>We can see our debugging messages</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl>Running on <span class=s2>&#34;main&#34;</span>
+</span></span><span class=line><span class=cl>Found ICMP:   %9 <span class=o>=</span> icmp eq i32 %8, <span class=m>170</span>
+</span></span></code></pre></div><p>and the new IR</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-sh data-lang=sh><span class=line><span class=cl>  %10 <span class=o>=</span> call i1024 @_modexp<span class=o>(</span>i1024 %9, i1024 65537, i1024 1017007098288797210334006385528916828552751347180612474172593003157176144465333669913986166820979933498812835433733986262198025362370426231598274860897<span class=o>)</span>
+</span></span><span class=line><span class=cl>  %11 <span class=o>=</span> icmp eq i1024 %10, <span class=m>3469564053790366715061592323640176705598106936172402593847334788658242570835498256709118189258676311740661037640620975888408101193592328848869326580739332</span>
+</span></span><span class=line><span class=cl>  %12 <span class=o>=</span> icmp eq i32 %8, <span class=m>170</span>
+</span></span><span class=line><span class=cl>  br i1 %11, label %13, label %15
+</span></span></code></pre></div><p>Here <code>%12</code> is the old <code>icmp</code>. You can manually check that this value is not used
+anymore in the function.</p><p>The original check was <code>getchar() + 0x5A == 0xAA</code>, which is basically
+<code>getchar() == 'P'</code>.
+To manually see if it still holds, we can use an interactive python console:</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=n>In</span> <span class=p>[</span><span class=mi>1</span><span class=p>]:</span> <span class=nb>pow</span><span class=p>(</span><span class=nb>ord</span><span class=p>(</span><span class=s1>&#39;P&#39;</span><span class=p>)</span> <span class=o>+</span> <span class=mh>0x5A</span><span class=p>,</span> <span class=mi>65537</span><span class=p>,</span> <span class=mi>10170070982887972103340063855289168285527513471806124741725930031571761444653336699139861668209799334988128354337339862621980253623704262315982748608975161</span><span class=p>)</span> \
+</span></span><span class=line><span class=cl>   <span class=o>...</span><span class=p>:</span>   <span class=o>==</span> <span class=mi>3469564053790366715061592323640176705598106936172402593847334788658242570835498256709118189258676311740661037640620975888408101193592328848869326580739332</span>
+</span></span><span class=line><span class=cl><span class=n>Out</span><span class=p>[</span><span class=mi>1</span><span class=p>]:</span> <span class=kc>True</span>
+</span></span></code></pre></div><p>Here you have the formal proof that everything we did so far is both correct and
+secure.</p><h2 id=final-words>Final Words</h2><p>We have our super secure obfuscator. Now it is your job to run it on more
+complex software and see how <em>well</em> it performs and what kind of monstrous CFGs
+you can get.
+Let&rsquo;s take a look at our majestic final result:</p><p><figure><img src=/images/20190223_final_ida.png alt="Final CFG" loading=lazy decoding=async></figure></p><p>Take that, Hex-Rays!</p><p>Want to try using symbolic execution? Sure, let&rsquo;s just use
+<a href=https://angr.io/>angr</a> with this&mldr;</p><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>import</span> <span class=nn>angr</span>
+</span></span><span class=line><span class=cl><span class=n>p</span> <span class=o>=</span> <span class=n>angr</span><span class=o>.</span><span class=n>Project</span><span class=p>(</span><span class=s1>&#39;./test/test&#39;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=n>s</span> <span class=o>=</span> <span class=n>p</span><span class=o>.</span><span class=n>factory</span><span class=o>.</span><span class=n>entry_state</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=n>sm</span> <span class=o>=</span> <span class=n>p</span><span class=o>.</span><span class=n>factory</span><span class=o>.</span><span class=n>simulation_manager</span><span class=p>(</span><span class=n>s</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=n>sm</span><span class=o>.</span><span class=n>explore</span><span class=p>(</span><span class=n>find</span><span class=o>=</span><span class=mh>0x404FD9</span><span class=p>)</span>
+</span></span></code></pre></div><p>&mldr;but don&rsquo;t forget to kill the process after a while or your RAM might get
+filled while Z3 is desperately trying to solve the constraints :P</p><p>Now that our code is protected from hackers and state actors one might wonder,
+<em>&ldquo;what about the private exponent in the RSA computation&rdquo;</em>?
+Well, yeah, we don&rsquo;t really use it directly.
+One could obtain a similar obfuscator using simple modular exponentiation
+(though some care must be taken in generating the exponent and the modulus).
+But we used RSA so we are more secure.</p><p>The only way to make this obfuscator more secure would be to embed a blockchain
+in the LLVM IR.
+But then you would need to do an ICO, which, while it would make you tons of
+money, is likely illegal in your country.
+You could use symmetric encryption instead of RSA, but we all know AES is
+boring, with all its shifts and xors.</p><p>Hop on <a href=https://github.com/thebabush/dumb-obfuscator>GitHub repository</a> to get
+the full sourcecode of this tutorial.</p><p>Let me know in the comments section
+(aka the <a href=https://github.com/thebabush/dumb-obfuscator/issues>GitHub issues</a>)
+if you have any improvements or fixes to my code.</p><p>Cheers,</p><p><em>babush</em></p><p><strong>EDIT</strong>: User wireshrink on
+<a href=https://www.reddit.com/r/ReverseEngineering/comments/aty9u1/dumbo_aka_how_to_build_a_simple_llvmbased/eh5srqv>Reddit</a>
+pointed out that Hex-Rays can be configured through <code>hexrays.cfg</code>.
+If you set <code>KERNEL_NREGS=4096</code> IDA will happily decompile the function.</p><p><strong>EDIT2</strong>: You can find the output binary on
+<a href=https://github.com/thebabush/dumb-obfuscator/releases>GitHub</a>.</p></div></div><nav class=postnav><div><a href=/vulnerabilita-mytim.html><span class="dir meta">← Previous</span>MyTIM Vulnerability</a></div><div class=next><a href=/code2vec-tldr.html><span class="dir meta">Next →</span>code2vec TL;DR</a></div></nav></div></article></main><footer class=sitefoot><div class=shell><ul class=social><li><a href=https://github.com/thebabush/><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63.0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577.0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.305-5.467-1.334-5.467-5.931.0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176.0.0 1.008-.322 3.301 1.23A11.5 11.5.0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221.0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222.0 1.606-.014 2.898-.014 3.293.0.322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+<span>GitHub</span></a></li><li><a href=https://www.linkedin.com/in/paolomontesel/><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853.0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601.0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433A2.062 2.062.0 013.274 5.368a2.064 2.064.0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225.0H1.771C.792.0.0.774.0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2.0 22.225.0z"/></svg>
+<span>LinkedIn</span></a></li><li><a href=https://twitter.com/pmontesel><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+<span>Twitter</span></a></li><li><a href=https://www.babush.me/index.xml><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.503 20.752C6.503 22.546 5.047 24 3.252 24 1.456 24 0 22.546.0 20.752s1.456-3.248 3.252-3.248c1.795.001 3.251 1.454 3.251 3.248zM0 8.18v4.811c6.05.062 10.96 4.966 11.022 11.009h4.817C15.777 15.29 8.721 8.242.0 8.18zm0-3.368C10.58 4.858 19.152 13.406 19.183 24H24C23.97 10.769 13.245.046.0.0z"/></svg>
+<span>RSS</span></a></li></ul><p>&copy; 2026 Paolo Montesel</p></div></footer><script src=/js/main.528aa6ae4ee209942ca7166f11d76d7161714b2aaaa19a49019d997c0e9822ce.js integrity="sha256-Uoqmrk7iCZQspxZvEddtcWFxSyqqoZpJAZ2ZfA6YIs4=" defer></script></body></html>
