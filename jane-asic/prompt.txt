@@ -1,0 +1,825 @@
+You are building an experimental GDS-level coverage-guided fuzzing system for digital ASICs.
+
+The immediate target is Jane Street's ASIC Puzzle 2026 repository:
+
+https://github.com/janestreet/asic-puzzle-2026
+
+Start with the `warmup/` directory.
+
+The central research question is:
+
+    Can we fuzz a digital ASIC starting from GDS, with essentially no human semantic reverse engineering, by automatically extracting an electrically simulatable representation and using internal electrical-node/pin/state activity as coverage?
+
+The long-term target is the actual challenge ASIC, whose external interface is already known/documented:
+
+    inputs:
+        clk
+        rst_n
+        enable
+        input
+
+    outputs:
+        success
+        out[7:0]
+
+The warmup has a different documented interface; inspect it from the repository. The warmup source/netlists are available as ground truth and validation oracles, but they MUST NOT be used to construct the main GDS-derived model.
+
+The desired end-state is conceptually:
+
+    GDS
+      ↓
+    automatic layout/electrical extraction
+      ↓
+    opaque electrical or digital graph
+      ↓
+    fast persistent simulator
+      ↓
+    internal-net/pin/state coverage
+      ↓
+    Rust fuzzing engine
+      ↓
+    sequence that asserts the target success output
+
+The circuit should remain semantically opaque to the fuzzer.
+
+Do NOT manually reverse:
+    - adders
+    - comparators
+    - shift registers
+    - FSMs
+    - constants
+    - gates unless automatic tooling requires their library definitions
+    - algorithmic intent
+
+It is acceptable and expected to use:
+    - PDK knowledge
+    - SKY130 layer definitions
+    - standard-cell library metadata
+    - automatic LVS/extraction
+    - automatic hierarchy information
+    - electrical connectivity
+    - pin definitions
+    - cell models
+    - clock/reset/interface information supplied externally
+
+The distinction is important:
+
+    automatic physical/electrical extraction = allowed
+    manually understanding what the circuit computes = not the goal
+
+The warmup RTL/netlists may ONLY be used for:
+    - differential testing
+    - correctness verification
+    - benchmarking
+    - measuring whether the fuzzer found the known trigger
+    - debugging extraction errors
+
+Do not use the warmup source to shortcut the GDS extraction path.
+
+Work autonomously. Inspect the repository, install/open-source dependencies as needed, write code, run tests, benchmark approaches, and leave a reproducible project behind.
+
+Environment
+===========
+
+Assume macOS, preferably Apple Silicon.
+
+Prefer open-source tooling.
+
+Likely useful tools include:
+    - KLayout
+    - Magic
+    - open_pdks / SKY130 PDK
+    - Netgen
+    - ngspice / libngspice
+    - Rust
+    - LibAFL
+    - Yosys
+    - Verilator
+    - CXXRTL
+    - gdstk or KLayout Python/Ruby APIs
+
+Do not assume all of these are necessary.
+
+Verify actual installation methods and current compatibility before installing.
+
+Prefer Homebrew where reasonable, but keep the build portable.
+
+Primary architectural constraint
+================================
+
+Do not begin by writing a semantic hardware decompiler.
+
+We want to determine the minimum lifting necessary for useful fuzzing.
+
+Preferred progression:
+
+    1. GDS → automatically extracted electrical connectivity
+    2. electrical connectivity → executable simulation
+    3. simulation → generic internal coverage
+    4. generic coverage → fuzzing
+    5. only if necessary, add richer automatically inferred feedback
+
+The first working system should not need to know that any given structure is a NAND, XOR, comparator, adder, shift register, etc.
+
+Phase 0: Repository and environment reconnaissance
+==================================================
+
+Clone and inspect:
+
+    https://github.com/janestreet/asic-puzzle-2026
+
+Understand the files in `warmup/`:
+
+    00_source.v
+    01_netlist.v
+    02_netlist_with_power_rails.v
+    03_post_place_and_route.def
+    04_final.gds
+
+Record:
+    - top-level cell name
+    - GDS hierarchy
+    - layer/datatype usage
+    - number of GDS cells
+    - whether standard-cell hierarchy survives
+    - whether names have merely been mangled or hierarchy is flattened
+    - external pin labels that survive
+    - physical dimensions
+    - relevant SKY130 library variant
+
+Write an automated inspection utility rather than relying only on GUI inspection.
+
+Produce machine-readable output, preferably JSON.
+
+Example:
+
+    {
+      "top": "...",
+      "cells": 123,
+      "layers": {...},
+      "external_labels": [...],
+      "hierarchy_preserved": true
+    }
+
+Phase 1: Prove automatic GDS electrical extraction
+=================================================
+
+Try the cheapest robust route first.
+
+Investigate KLayout LVS/LayoutToNetlist and Magic/open_pdks extraction.
+
+Goal:
+
+    warmup/04_final.gds
+        ↓
+    automatically generated transistor/electrical netlist
+
+The result may initially be SPICE/CDL.
+
+Do not manually trace geometry.
+
+Use SKY130 extraction/LVS decks where possible.
+
+Document the exact command that performs extraction.
+
+Example desired UX:
+
+    ./scripts/extract.sh warmup/04_final.gds
+
+producing:
+
+    build/warmup/extracted.spice
+
+The extraction path must depend on:
+    - GDS
+    - PDK/extraction rules
+    - configuration such as top-level cell
+
+It must not depend on:
+    - 01_netlist.v
+    - 02_netlist_with_power_rails.v
+    - 03_post_place_and_route.def
+
+Those files may be used afterward to verify the extracted result.
+
+Validate basic connectivity and device counts against the known warmup artifacts.
+
+If standard-cell hierarchy survives and there is an easier automatic route that emits a cell-level netlist directly, implement it, but keep the pipeline generic.
+
+Record both possibilities:
+
+    A. transistor-level extraction
+    B. standard-cell-level extraction
+
+Do not require a human to identify cells manually.
+
+Phase 2: Get the GDS-derived circuit executable
+===============================================
+
+First build the simplest correct executable model.
+
+Possible options, in order of expedience:
+
+    A. libngspice embedded as a library
+    B. ngspice subprocess
+    C. switch-level digital MOS simulator
+    D. automatically generated gate-level model
+    E. custom digital graph simulator
+
+Start with correctness, not speed.
+
+The simulator must provide a programmatic API conceptually equivalent to:
+
+    reset()
+    set_input(pin, value)
+    advance_half_cycle()
+    settle()
+    read_output(pin)
+    read_internal_node(node_id)
+    snapshot()
+    restore()
+
+For the warmup, use the documented interface.
+
+Clock generation should be owned by the harness.
+
+Reset should normally be driven deterministically by the harness and should not initially be fuzzed.
+
+The simulator should stay resident.
+
+Do NOT launch a new process for every testcase once the basic proof-of-concept works.
+
+Implement snapshot/restore or an equivalent persistent reset mechanism.
+
+Phase 3: Differential correctness testing
+=========================================
+
+This phase is critical.
+
+Build a reference simulator from the warmup RTL or known gate-level netlist.
+
+Generate thousands of random input sequences.
+
+For every sequence:
+
+    run reference model
+    run GDS-derived model
+
+Compare observable outputs cycle-by-cycle.
+
+Fail loudly on any divergence.
+
+The GDS-derived model must become trustworthy before fuzzing results are considered meaningful.
+
+Produce:
+
+    cargo test
+or equivalent
+
+that performs a deterministic differential test.
+
+Store failing waveforms in a reproducible format.
+
+Example:
+
+    corpus/regressions/extraction_bug_001.json
+
+Phase 4: Define coverage without semantic reversing
+==================================================
+
+Implement generic internal activity coverage.
+
+Start with the following coverage signals:
+
+    1. internal node became 0
+    2. internal node became 1
+    3. internal node transition 0→1
+    4. internal node transition 1→0
+
+Represent this in an AFL-like bitmap.
+
+For example:
+
+    hash(node_id, transition_kind) & (MAP_SIZE - 1)
+
+Avoid rewarding transition counts indefinitely.
+
+We care about novelty, not how many times the clock toggled.
+
+Automatically suppress or de-prioritize obvious global nets:
+
+    VDD
+    VSS
+    clock
+    perhaps reset
+
+Possible heuristics:
+    - huge fanout
+    - always-on activity
+    - supply identity from extraction
+    - external configuration
+
+Prefer sampling after the circuit has settled around clock edges, rather than recording every analog glitch.
+
+Add a configurable mode:
+
+    --coverage net-values
+    --coverage net-transitions
+    --coverage clock-sampled
+    --coverage state-hash
+
+Implement state-hash coverage as well:
+
+    hash(selected_internal_node_values after rising edge)
+
+Be careful about combinational noise.
+
+Prefer sampling only stable post-clock states.
+
+Phase 5: Build the warmup fuzzer
+================================
+
+Implement the fuzzing harness in Rust.
+
+Strong preference:
+    LibAFL
+
+A fully custom Rust fuzzer is acceptable if LibAFL becomes more cumbersome than useful, but begin by evaluating LibAFL because the design naturally maps to:
+    - custom Input
+    - custom Executor
+    - custom Observer
+    - custom Feedback
+    - custom Mutators
+
+Do not prefer honggfuzz merely because it is simpler to launch. The target is not a conventional process and custom feedback is central.
+
+Represent sequential input structurally.
+
+For example, warmup input might become:
+
+    struct Cycle {
+        a: bool,
+        b: bool,
+        en: bool,
+    }
+
+or whatever accurately matches the warmup interface.
+
+Clock is not part of the fuzzed bytes.
+
+Reset is initially not part of the fuzzed bytes.
+
+A testcase should be a sequence:
+
+    struct Testcase {
+        cycles: Vec<Cycle>,
+    }
+
+Implement mutators such as:
+    - bit flip
+    - cycle insertion
+    - cycle deletion
+    - cycle duplication
+    - subsequence splice
+    - toggle enable window
+    - overwrite consecutive input bits
+    - corpus splice
+
+Keep a raw-byte serialization for corpus storage.
+
+The fuzzer's primary objective is:
+
+    assert the warmup success output
+
+Treat success as a crash/objective hit and persist the testcase.
+
+Phase 6: Establish a random baseline
+====================================
+
+Before claiming anything about coverage-guided fuzzing, implement a dumb random search using the exact same simulator.
+
+Run many statistically independent trials.
+
+Measure:
+
+    - executions to first success
+    - simulated cycles to first success
+    - wall-clock time to first success
+
+Then benchmark:
+
+    random
+    vs
+    net-value coverage
+    vs
+    transition coverage
+    vs
+    clock-sampled state coverage
+
+Run enough independent seeds to produce meaningful distributions.
+
+Output CSV or JSON.
+
+Example:
+
+    mode,seed,execs,cycles,seconds,success
+    random,1,...
+    coverage,1,...
+
+Generate a simple benchmark report.
+
+The important question is not merely:
+    "does coverage work?"
+
+but:
+    "does opaque internal electrical coverage materially outperform random search?"
+
+Phase 7: Performance work
+=========================
+
+Profile before optimizing.
+
+Measure:
+    - simulator cost
+    - reset/restore cost
+    - coverage collection cost
+    - mutation cost
+    - corpus scheduling cost
+
+If SPICE is too slow, which is expected, replace it with a faster model while preserving zero-semantic-RE as much as possible.
+
+Preferred escalation:
+
+    transistor SPICE
+        ↓
+    switch-level MOS simulator
+        ↓
+    automatically generated digital/cell model
+        ↓
+    native compiled simulator
+
+A custom switch-level simulator is acceptable.
+
+A custom digital simulator is acceptable.
+
+If standard-cell hierarchy is automatically identifiable from the GDS/PDK and no human interpretation is needed, converting cells into digital behavior is acceptable.
+
+What is not desired is a human manually analyzing:
+    "these 9 XORs form the comparator."
+
+The fast simulator should support:
+    - persistent execution
+    - snapshots
+    - cheap restore
+    - internal node observation
+    - deterministic execution
+    - ideally millions of primitive events/sec
+
+Do not make process startup part of the fuzzing hot path.
+
+Phase 8: Optional CmpLog/Redqueen-style work
+============================================
+
+Do this only after basic net/state coverage works.
+
+Research whether useful comparison-distance feedback can be derived automatically.
+
+Possible approaches:
+
+    A. Compile an automatically generated digital model with AFL++ CmpLog and see what comparisons survive.
+
+    B. Detect comparator-like Boolean cones automatically.
+
+    C. Detect equality reductions structurally:
+        XOR/XNOR bank → reduction AND/NOR
+
+    D. Recover bit-vectors mechanically and emit:
+        site_id
+        cycle
+        lhs
+        rhs
+        width
+
+No human semantic annotation.
+
+A useful internal comparison record:
+
+    struct CmpRecord {
+        site: u32,
+        cycle: u32,
+        lhs: u64,
+        rhs: u64,
+        width: u8,
+    }
+
+For equality, also experiment with:
+
+    popcount(lhs ^ rhs)
+
+as a distance metric.
+
+For sequential designs, preserve the cycle number or state context. A hardware predicate at cycle 3 and the same predicate at cycle 300 may be meaningfully different.
+
+If implementing Redqueen/input-to-state ideas, make them waveform-aware.
+
+Example:
+
+    compare at cycle 20 depends on bits shifted during cycles 12..19
+
+If this dependency can be derived automatically, use it to target mutations.
+
+This is an advanced phase. Do not block the initial fuzzer on it.
+
+Phase 9: Generalize to the real challenge
+=========================================
+
+Once the warmup path is validated, the generic command should look roughly like:
+
+    gdsfuzz \
+      --gds challenge.gds \
+      --pdk sky130 \
+      --top TOP \
+      --clock clk \
+      --reset rst_n \
+      --input enable \
+      --input input \
+      --target success \
+      --observe 'out[7:0]'
+
+The known real challenge interface is:
+
+    clk
+    rst_n
+    enable
+    input
+    success
+    out[7:0]
+
+Treat `out[7:0]` as extra observable novelty even if its semantics are unknown.
+
+For example:
+    - new output byte values
+    - output transitions
+    - output sequences
+
+may contribute auxiliary feedback.
+
+Do not manually reverse the "output generator" block or other internals.
+
+Architecture
+============
+
+Aim for a Rust workspace roughly like:
+
+    gdsfuzz/
+      Cargo.toml
+
+      crates/
+        gds-inspect/
+        extractor/
+        circuit-ir/
+        simulator/
+        coverage/
+        fuzz/
+        cli/
+
+      scripts/
+        bootstrap-macos.sh
+        extract-warmup.sh
+        differential-test.sh
+        bench-warmup.sh
+
+      vendor/
+        or configuration pointing to SKY130/open_pdks
+
+      corpus/
+        warmup/
+        regressions/
+
+      results/
+        benchmarks/
+
+      docs/
+        architecture.md
+        extraction.md
+        coverage.md
+        benchmark.md
+
+A possible internal opaque IR:
+
+    Circuit {
+        nodes: Vec<Node>,
+        devices: Vec<Device>,
+        inputs: Vec<NodeId>,
+        outputs: Vec<NodeId>,
+    }
+
+Do not bake semantic names into the IR unless automatically known.
+
+Use stable numeric IDs.
+
+Instrumentation
+===============
+
+The instrumentation path must be cheap.
+
+Do not allocate per event in the fuzz loop.
+
+Use preallocated arrays/bitmaps.
+
+Example:
+
+    coverage_map[hash(node, transition) & mask] |= 1
+
+For snapshot/restore, prefer memcpy-like state restoration if possible.
+
+Separate:
+    immutable topology
+from:
+    mutable simulation state
+
+Example:
+
+    Simulator {
+        circuit: Arc<Circuit>,
+        node_values: Vec<Value>,
+        device_state: Vec<...>,
+        queue: VecDeque<Event>,
+    }
+
+Snapshot only mutable state.
+
+Testing requirements
+====================
+
+Add automated tests for:
+
+    - GDS loading
+    - extraction determinism
+    - stable node numbering if practical
+    - simulator determinism
+    - reset reproducibility
+    - snapshot/restore equivalence
+    - differential correctness against warmup RTL
+    - coverage-map stability
+    - corpus serialization roundtrip
+    - success testcase replay
+
+Every discovered success must be replayable with:
+
+    gdsfuzz replay testcase.bin
+
+and produce an explicit cycle where success asserted.
+
+Benchmark requirements
+======================
+
+At minimum report:
+
+    extraction time
+    extracted device/node count
+    simulator cycles/sec
+    fuzz executions/sec
+    average testcase length
+    coverage bitmap occupancy
+    corpus size
+    execs-to-success distribution
+    wall-time-to-success distribution
+
+Compare multiple random seeds.
+
+Keep warmup sequence-length limits identical when comparing strategies.
+
+Important research questions
+============================
+
+Explicitly answer these in the final report:
+
+    1. Can the warmup GDS be converted automatically into a correct executable model without manually reversing its logic?
+
+    2. What is the minimum useful abstraction:
+         transistor SPICE,
+         switch-level,
+         standard-cell digital,
+         something else?
+
+    3. How slow is direct SPICE fuzzing?
+
+    4. How much faster is a switch/digital model?
+
+    5. Does internal electrical-node coverage outperform black-box/random fuzzing?
+
+    6. Which coverage definition works best:
+         values,
+         transitions,
+         sampled state,
+         hashed state?
+
+    7. Does sequential statefulness materially hurt fuzzing?
+
+    8. Are snapshots/checkpoints sufficient to manage long prefixes?
+
+    9. How much target-specific human configuration is actually required?
+
+    10. Can useful CmpLog-like feedback be obtained automatically without semantic reverse engineering?
+
+    11. Is LibAFL the correct long-term substrate, or is a small custom Rust fuzzer measurably cleaner/faster?
+
+Engineering philosophy
+=======================
+
+Prefer a working empirical system over a theoretical framework.
+
+Do not spend days designing a perfect decompiler.
+
+The experiment is specifically trying to avoid decompilation.
+
+Start with:
+    automatic extraction
+    + dumb simulation
+    + dumb coverage
+
+and measure.
+
+Keep each stage independently testable.
+
+When something fails, determine whether the failure is:
+    extraction
+    electrical modeling
+    simulation
+    harness
+    coverage
+    fuzzing
+
+Do not paper over extraction/model errors with manual circuit knowledge.
+
+Use the warmup artifacts aggressively as an oracle, but never as an implementation shortcut.
+
+Expected first milestone
+========================
+
+The first meaningful milestone is:
+
+    warmup/04_final.gds
+        ↓
+    fully automatic extraction
+        ↓
+    executable opaque model
+        ↓
+    harness-generated reset/clock
+        ↓
+    random test sequence
+        ↓
+    output matches warmup RTL
+
+Expected second milestone:
+
+    same GDS-derived model
+        ↓
+    internal node/state coverage
+        ↓
+    Rust coverage-guided fuzzer
+        ↓
+    automatically discovers a sequence asserting warmup success
+
+Expected third milestone:
+
+    quantitative comparison against random fuzzing
+
+Only after those milestones should you spend significant time on:
+    - CmpLog
+    - comparator discovery
+    - Redqueen
+    - dependency/taint analysis
+    - sophisticated state checkpointing
+
+Deliverables
+============
+
+Leave behind:
+
+    1. Reproducible macOS setup instructions.
+    2. All source code.
+    3. Extraction scripts.
+    4. A working warmup replay tool.
+    5. A random baseline.
+    6. A coverage-guided fuzzer.
+    7. Differential tests against warmup RTL.
+    8. Benchmarks.
+    9. A short technical report explaining what worked and what failed.
+    10. Exact commands required to reproduce the result from a fresh clone.
+
+Do not stop at a design document.
+
+Run the code.
+
+When uncertain between approaches, implement the smallest experiment that distinguishes them.
+
+The primary success criterion is not recovering readable RTL.
+
+The primary success criterion is:
+
+    starting from GDS + PDK + external interface,
+    automatically obtain enough execution and internal observability
+    to coverage-guide a fuzzer toward the target output,
+    while keeping the internal circuit semantically opaque.

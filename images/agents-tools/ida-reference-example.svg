@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="790" viewBox="0 0 1200 790">
+  <rect width="1200" height="790" fill="#e9e6df"/>
+  <rect x="32" y="38" width="1136" height="722" rx="18" fill="#d2cfc8"/>
+  <rect x="32" y="30" width="1136" height="722" rx="18" fill="#171c23"/>
+  <path d="M50 30 H1150 Q1168 30 1168 48 V100 H32 V48 Q32 30 50 30" fill="#232a34"/>
+  <circle cx="62" cy="65" r="7" fill="#f07878"/>
+  <circle cx="86" cy="65" r="7" fill="#e6bb67"/>
+  <circle cx="110" cy="65" r="7" fill="#7fbf91"/>
+  <g font-family="Menlo, monospace" font-size="22" xml:space="preserve">
+    <text x="150" y="73" fill="#d2d8e0">ida-mcp / reference</text>
+    <text x="1130" y="73" text-anchor="end" fill="#a6b0bf" font-size="17">RESPONSE EXCERPT</text>
+    <text x="70" y="151" fill="#9ba8b8" font-size="17" letter-spacing="2">TOOL CALL</text>
+    <text x="70" y="199" font-size="27"><tspan fill="#84d6bd">reference</tspan><tspan fill="#dce3ec">({</tspan><tspan fill="#abbff1">&quot;query&quot;</tspan><tspan fill="#dce3ec">: </tspan><tspan fill="#e8c58a">&quot;decompile function&quot;</tspan><tspan fill="#dce3ec">})</tspan></text>
+    <path d="M70 231 H1130" stroke="#35404d"/>
+    <text x="70" y="277" fill="#9ba8b8" font-size="17" letter-spacing="2">IDA DOMAIN API · 0.5.1</text>
+    <text x="70" y="329" fill="#84d6bd" font-size="26">Pseudocode.decompile(</text>
+    <text x="102" y="370" fill="#dce3ec">ea_or_func: Union[int, func_t],</text>
+    <text x="102" y="411" fill="#dce3ec">flags: DecompilationFlags = DecompilationFlags(0)</text>
+    <text x="70" y="452"><tspan fill="#84d6bd">)</tspan><tspan fill="#dce3ec"> → </tspan><tspan fill="#abbff1">PseudocodeFunction</tspan></text>
+    <text x="70" y="510" fill="#dce3ec">Decompile a function and return the ctree result.</text>
+    <text x="70" y="564" fill="#e8c58a">Args</text>
+    <text x="185" y="564" fill="#c4cedb">Function entry address or func_t object;</text>
+    <text x="185" y="599" fill="#c4cedb">optional decompilation flags.</text>
+    <text x="70" y="646" fill="#e8c58a">Returns</text>
+    <text x="185" y="646" fill="#c4cedb">A PseudocodeFunction wrapping the cfunc_t result.</text>
+    <path d="M70 678 H1130" stroke="#35404d"/>
+    <text x="70" y="719" fill="#9ba8b8" font-size="16">Real query and response · shortened for readability</text>
+    <text x="1130" y="719" text-anchor="end" fill="#9ba8b8" font-size="16">ida_domain/pseudocode.py:3370</text>
+  </g>
+</svg>
